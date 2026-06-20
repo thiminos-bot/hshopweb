@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Historique des Ventes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans h-screen flex flex-col">
+
+    <header class="bg-gray-800 text-white px-6 py-4 flex justify-between items-center shadow-md">
+        <h1 class="text-2xl font-bold tracking-wide">HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-lg"></span> ── JOURNAL DES VENTES</h1>
+        <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg font-semibold transition">
+            ⬅ Retour à la Caisse
+        </a>
+    </header>
+
+    <main class="flex-1 p-6 overflow-hidden flex flex-col">
+        <div class="bg-white rounded-xl shadow p-6 flex flex-col flex-1 overflow-hidden">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b">
+                <h2 class="text-xl font-semibold text-gray-700">30 dernières transactions</h2>
+                <button onclick="chargerHistorique()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-lg transition">🔄 Rafraîchir</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b tracking-wider">
+                            <th class="p-3">ID / Réf</th>
+                            <th class="p-3">Date</th>
+                            <th class="p-3">Vendeur</th>
+                            <th class="p-3">Mode</th>
+                            <th class="p-3">Note</th>
+                            <th class="p-3 text-right">Montant Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-corps" class="divide-y text-gray-700 font-medium"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+
+window.onload = function() {
+    token = localStorage.getItem("hshop_token");
+    chargerHistorique();
+    chargerNomStructureHeader();
+};
+
+async function chargerNomStructureHeader() {
+    try {
+        const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+        if (!response.ok) return;
+        const p = await response.json();
+        if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+    } catch (e) { /* pas bloquant */ }
+}
+        async function chargerHistorique() {
+            const corps = document.getElementById("table-corps");
+            try {
+                const response = await fetch(`${API_URL}/ventes/historique`, {
+                    headers: { "Authorization": `Bearer ${token}` } // Envoi indispensable du token
+                });
+                
+                if (response.status === 401) { window.location.href = "login.html"; return; }
+                if (!response.ok) throw new Error();
+
+                const ventes = await response.json();
+                corps.innerHTML = "";
+
+                if (ventes.length === 0) { corps.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-gray-400 italic">Aucune vente trouveé.</td></tr>`; return; }
+
+                ventes.forEach(v => {
+                    const tr = document.createElement("tr");
+                    tr.className = "hover:bg-gray-50 transition animate-fade-in";
+                    tr.innerHTML = `
+                        <td class="p-3 font-bold text-blue-600">#${v.id}</td>
+                        <td class="p-3 text-gray-500 text-sm">${v.date_vente}</td>
+                        <td class="p-3"><span class="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded font-bold">${v.vendeur}</span></td>
+                        <td class="p-3 text-xs font-bold">${v.mode_paiement}</td>
+                        <td class="p-3 text-sm text-gray-500 italic max-w-xs truncate">${v.note || '-'}</td>
+                        <td class="p-3 text-right font-black text-gray-900 text-lg">${v.total.toLocaleString()} F</td>
+                    `;
+                    corps.appendChild(tr);
+                });
+            } catch (error) {
+                corps.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-500 font-semibold">Erreur de chargement.</td></tr>`;
+            }
+        }
+    </script>
+</body>
+</html>

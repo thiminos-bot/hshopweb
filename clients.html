@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Clients & Crédits</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">💳 HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── CLIENTS & CRÉDITS</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <main class="p-4 sm:p-6 max-w-5xl mx-auto">
+        <div class="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center mb-4">
+            <input id="recherche-client" oninput="rendreTableClients()" placeholder="🔍 Rechercher un client..." class="border rounded-lg p-2 flex-1">
+            <label class="flex items-center gap-2 text-sm font-bold text-gray-600 whitespace-nowrap">
+                <input type="checkbox" id="filtre-impayes" checked onchange="rendreTableClients()"> Impayés seulement
+            </label>
+            <button onclick="ouvrirModalClient()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg whitespace-nowrap">+ Nouveau client</button>
+        </div>
+
+        <div id="total-impaye-bandeau" class="bg-red-50 border border-red-200 text-red-700 font-bold rounded-lg p-3 mb-4 hidden"></div>
+
+        <div class="bg-white rounded-xl shadow overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead><tr class="text-gray-400 uppercase text-xs border-b">
+                    <th class="p-3">Client</th><th class="p-3">Téléphone</th>
+                    <th class="p-3 text-right">Solde dû</th><th class="p-3 text-right">Plafond</th>
+                    <th class="p-3 text-right">Actions</th>
+                </tr></thead>
+                <tbody id="table-clients" class="divide-y">
+                    <tr><td colspan="5" class="p-6 text-center text-gray-400 italic">Chargement...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- ===== MODAL CLIENT (fiche + règlement + historique) ===== -->
+    <div id="modal-client" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <h2 id="modal-client-titre" class="text-lg font-bold text-gray-800 mb-4">Nouveau client</h2>
+
+            <form id="form-client" onsubmit="enregistrerClient(event)" class="space-y-3">
+                <input type="hidden" id="cl-id">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Nom *</label>
+                    <input id="cl-nom" required class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Téléphone</label>
+                        <input id="cl-telephone" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Plafond crédit (0 = illimité)</label>
+                        <input id="cl-encours-max" type="number" step="any" min="0" value="0" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Email</label>
+                    <input id="cl-email" type="email" class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Adresse</label>
+                    <input id="cl-adresse" class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="fermerModalClient()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg">Annuler</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg">Enregistrer</button>
+                </div>
+            </form>
+
+            <div id="bloc-solde-client" class="hidden mt-6 pt-6 border-t">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="font-bold text-gray-600">Solde dû :</span>
+                    <span id="cl-solde-affiche" class="text-2xl font-black text-red-600">0 F</span>
+                </div>
+
+                <form onsubmit="enregistrerReglement(event)" class="bg-gray-50 rounded-lg p-3 space-y-2 mb-4">
+                    <p class="text-xs font-bold text-gray-500 uppercase">Enregistrer un paiement reçu</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input id="rg-montant" type="number" step="any" min="0" placeholder="Montant" required class="border rounded-lg p-2">
+                        <select id="rg-mode" class="border rounded-lg p-2 bg-white">
+                            <option value="ESPECES">ESPÈCES</option>
+                            <option value="MOBILE">MOBILE MONEY</option>
+                        </select>
+                    </div>
+                    <input id="rg-note" placeholder="Note (optionnel)" class="w-full border rounded-lg p-2">
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg">Enregistrer le paiement</button>
+                </form>
+
+                <p class="text-xs font-bold text-gray-500 uppercase mb-2">Historique</p>
+                <div id="cl-historique" class="space-y-2 max-h-48 overflow-y-auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+        let cacheClients = [];
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            chargerClients();
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+        function gererNonAutorise() { localStorage.clear(); window.location.href = "login.html"; }
+        function authHeaders(json) { return json ? { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" } : { "Authorization": `Bearer ${token}` }; }
+        function fmtF(n) { return Math.round(n || 0).toLocaleString() + " F"; }
+
+        async function api(path, options = {}) {
+            const response = await fetch(`${API_URL}${path}`, options);
+            if (response.status === 401) { gererNonAutorise(); throw new Error("401"); }
+            if (!response.ok) {
+                let detail = "Erreur serveur.";
+                try { detail = (await response.json()).detail || detail; } catch (e) {}
+                throw new Error(detail);
+            }
+            return response.status === 204 ? null : response.json();
+        }
+
+        async function chargerClients() {
+            try {
+                cacheClients = await api("/clients", { headers: authHeaders() });
+                rendreTableClients();
+            } catch (e) {
+                if (e.message !== "401") document.getElementById("table-clients").innerHTML = `<tr><td colspan="5" class="p-6 text-center text-red-500">${e.message}</td></tr>`;
+            }
+        }
+
+        function rendreTableClients() {
+            const q = document.getElementById("recherche-client").value.toLowerCase();
+            const impayesSeulement = document.getElementById("filtre-impayes").checked;
+            let liste = cacheClients.filter(c => c.nom.toLowerCase().includes(q) || (c.telephone || "").includes(q));
+            if (impayesSeulement) liste = liste.filter(c => c.solde_credit > 0);
+            liste = liste.slice().sort((a, b) => b.solde_credit - a.solde_credit);
+
+            const totalImpaye = cacheClients.reduce((s, c) => s + (c.solde_credit > 0 ? c.solde_credit : 0), 0);
+            const bandeau = document.getElementById("total-impaye-bandeau");
+            if (totalImpaye > 0) { bandeau.classList.remove("hidden"); bandeau.innerText = `💳 Total impayé sur tous les clients : ${fmtF(totalImpaye)}`; }
+            else bandeau.classList.add("hidden");
+
+            const body = document.getElementById("table-clients");
+            if (liste.length === 0) { body.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-gray-400 italic">${impayesSeulement ? '✅ Aucun impayé.' : 'Aucun client.'}</td></tr>`; return; }
+            body.innerHTML = liste.map(c => `
+                <tr>
+                    <td class="p-3 font-bold">${c.nom}</td>
+                    <td class="p-3 text-gray-500">${c.telephone || '-'}</td>
+                    <td class="p-3 text-right font-bold ${c.solde_credit > 0 ? 'text-red-600' : 'text-green-600'}">${fmtF(c.solde_credit)}</td>
+                    <td class="p-3 text-right text-gray-400">${c.encours_max > 0 ? fmtF(c.encours_max) : 'illimité'}</td>
+                    <td class="p-3 text-right"><button onclick="ouvrirModalClient(${c.id})" class="text-blue-600 hover:underline text-xs font-bold">Ouvrir</button></td>
+                </tr>`).join("");
+        }
+
+        function ouvrirModalClient(id) {
+            document.getElementById("form-client").reset();
+            document.getElementById("cl-id").value = id || "";
+            document.getElementById("modal-client-titre").innerText = id ? "Fiche client" : "Nouveau client";
+            document.getElementById("bloc-solde-client").classList.toggle("hidden", !id);
+
+            if (id) {
+                const c = cacheClients.find(x => x.id === id);
+                document.getElementById("cl-nom").value = c.nom;
+                document.getElementById("cl-telephone").value = c.telephone || "";
+                document.getElementById("cl-email").value = c.email || "";
+                document.getElementById("cl-adresse").value = c.adresse || "";
+                document.getElementById("cl-encours-max").value = c.encours_max || 0;
+                chargerHistoriqueClient(id);
+            } else {
+                document.getElementById("cl-encours-max").value = 0;
+            }
+            document.getElementById("modal-client").classList.remove("hidden");
+        }
+        function fermerModalClient() { document.getElementById("modal-client").classList.add("hidden"); }
+
+        async function chargerHistoriqueClient(id) {
+            const zone = document.getElementById("cl-historique");
+            zone.innerHTML = `<p class="text-gray-400 italic text-xs">Chargement...</p>`;
+            try {
+                const data = await api(`/clients/${id}/historique`, { headers: authHeaders() });
+                document.getElementById("cl-solde-affiche").innerText = fmtF(data.client.solde_credit);
+                zone.innerHTML = data.historique.length === 0 ? `<p class="text-gray-400 italic text-xs">Aucun mouvement.</p>` :
+                    data.historique.map(h => `
+                        <div class="flex justify-between text-xs border-b pb-1">
+                            <span class="text-gray-500">${h.date} — ${h.type === 'vente' ? 'Vente #' + h.vente_id : 'Paiement (' + h.mode_paiement + ')'}</span>
+                            <span class="font-bold ${h.montant > 0 ? 'text-red-600' : 'text-green-600'}">${h.montant > 0 ? '+' : ''}${fmtF(h.montant)}</span>
+                        </div>`).join("");
+            } catch (e) { if (e.message !== "401") zone.innerHTML = `<p class="text-red-500 text-xs">${e.message}</p>`; }
+        }
+
+        async function enregistrerClient(event) {
+            event.preventDefault();
+            const id = document.getElementById("cl-id").value;
+            const payload = {
+                nom: document.getElementById("cl-nom").value,
+                telephone: document.getElementById("cl-telephone").value,
+                email: document.getElementById("cl-email").value,
+                adresse: document.getElementById("cl-adresse").value,
+                encours_max: parseFloat(document.getElementById("cl-encours-max").value) || 0,
+            };
+            try {
+                if (id) await api(`/clients/${id}`, { method: "PUT", headers: authHeaders(true), body: JSON.stringify(payload) });
+                else await api("/clients", { method: "POST", headers: authHeaders(true), body: JSON.stringify(payload) });
+                fermerModalClient();
+                chargerClients();
+            } catch (e) { if (e.message !== "401") alert("Erreur : " + e.message); }
+        }
+
+        async function enregistrerReglement(event) {
+            event.preventDefault();
+            const id = document.getElementById("cl-id").value;
+            const payload = {
+                montant: parseFloat(document.getElementById("rg-montant").value) || 0,
+                mode_paiement: document.getElementById("rg-mode").value,
+                note: document.getElementById("rg-note").value,
+            };
+            try {
+                await api(`/clients/${id}/reglement`, { method: "POST", headers: authHeaders(true), body: JSON.stringify(payload) });
+                document.getElementById("rg-montant").value = "";
+                document.getElementById("rg-note").value = "";
+                await chargerClients();
+                ouvrirModalClient(parseInt(id)); // rafraîchit la fiche (solde + historique) sans fermer le modal
+            } catch (e) { if (e.message !== "401") alert("Erreur : " + e.message); }
+        }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+    </script>
+</body>
+</html>

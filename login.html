@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Connexion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 h-screen flex items-center justify-center font-sans">
+
+    <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-blue-600">
+        <div class="text-center mb-8">
+            <h1 id="titre-login" class="text-3xl font-black text-gray-800 tracking-wider">HSHOP</h1>
+            <p class="text-gray-400 text-sm mt-1">Authentification Terminal de Caisse</p>
+        </div>
+
+        <form id="login-form" onsubmit="gererConnexion(event)" class="space-y-6">
+            <div>
+                <label class="block text-xs font-bold text-gray-600 uppercase mb-2 tracking-wide">Identifiant Vendeur</label>
+                <input type="text" id="username" required autocomplete="username"
+                       class="w-full border-2 border-gray-200 p-3 rounded-xl text-lg focus:outline-none focus:border-blue-500 font-medium transition">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-gray-600 uppercase mb-2 tracking-wide">Mot de passe</label>
+                <input type="password" id="password" required autocomplete="current-password"
+                       class="w-full border-2 border-gray-200 p-3 rounded-xl text-lg focus:outline-none focus:border-blue-500 font-medium transition">
+            </div>
+
+            <div id="erreur-message" class="text-red-500 text-sm font-bold text-center hidden bg-red-50 p-3 rounded-xl border border-red-200">
+                </div>
+
+            <button type="submit" 
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition text-lg tracking-wide">
+                OUVRIR LA SESSION
+            </button>
+        </form>
+    </div>
+
+    <script>
+        const API_URL = "";
+
+        window.addEventListener("DOMContentLoaded", async () => {
+            try {
+                const response = await fetch(`${API_URL}/identite-publique`);
+                if (!response.ok) return;
+                const d = await response.json();
+                if (d.nom_structure) document.getElementById("titre-login").innerText = "HSHOP — " + d.nom_structure;
+            } catch (e) { /* pas bloquant : reste sur "HSHOP" */ }
+
+            if (new URLSearchParams(window.location.search).get("fermeture") === "auto") {
+                const errorDiv = document.getElementById("erreur-message");
+                errorDiv.innerText = "🔒 Session fermée automatiquement (heure de fermeture de caisse atteinte). Reconnecte-toi si besoin.";
+                errorDiv.classList.remove("hidden");
+            }
+        });
+
+        async function gererConnexion(event) {
+            event.preventDefault(); // Empêche le rechargement brut de la page
+            
+            const usernameInput = document.getElementById("username").value.trim();
+            const passwordInput = document.getElementById("password").value;
+            const errorDiv = document.getElementById("erreur-message");
+            
+            errorDiv.classList.add("hidden");
+
+            // FastAPI attend un format x-www-form-urlencoded pour la route /token standard
+            const formData = new URLSearchParams();
+            formData.append("username", usernameInput);
+            formData.append("password", passwordInput);
+
+            try {
+                const response = await fetch(`${API_URL}/token`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // On enregistre proprement les informations dans le navigateur
+                    localStorage.setItem("hshop_token", data.access_token);
+                    localStorage.setItem("hshop_user", usernameInput);
+                    localStorage.setItem("hshop_role", data.role || "");
+
+                    // Redirection vers la caisse sans boucle de clignotement
+                    window.location.href = "caisse.html";
+                } else {
+                    const errorData = await response.json();
+                    errorDiv.innerText = errorData.detail || "Identifiant ou mot de passe incorrect.";
+                    errorDiv.classList.remove("hidden");
+                }
+            } catch (error) {
+                errorDiv.innerText = "Impossible de joindre le serveur. Vérifiez que main.py est lancé.";
+                errorDiv.classList.remove("hidden");
+            }
+        }
+    </script>
+</body>
+</html>

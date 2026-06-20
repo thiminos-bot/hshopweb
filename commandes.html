@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Commandes fournisseurs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">📦 HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── COMMANDES FOURNISSEURS</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <main id="contenu" class="p-4 sm:p-6 max-w-5xl mx-auto">
+        <p class="text-gray-400 italic text-center py-10">Chargement...</p>
+    </main>
+
+    <!-- ===== MODAL NOUVELLE COMMANDE ===== -->
+    <div id="modal-commande" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 my-8">
+            <h2 class="text-lg font-bold text-gray-800 mb-4">Nouvelle commande</h2>
+            <form onsubmit="creerCommande(event)" class="space-y-3">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Fournisseur *</label>
+                    <select id="nc-fournisseur" required class="w-full border rounded-lg p-2 mt-1 bg-white"><option value="">-- sélectionner --</option></select>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Note</label>
+                    <input id="nc-note" class="w-full border rounded-lg p-2 mt-1">
+                </div>
+
+                <div class="border-t pt-3 mt-3">
+                    <label class="text-xs font-bold text-gray-500 uppercase mb-2 block">Articles</label>
+                    <div class="grid grid-cols-12 gap-2 mb-2">
+                        <select id="nc-produit-select" class="col-span-6 border rounded-lg p-2 bg-white text-sm"><option value="">-- produit --</option></select>
+                        <input id="nc-quantite" type="number" step="any" min="0" placeholder="Qté" class="col-span-2 border rounded-lg p-2 text-sm">
+                        <input id="nc-prix" type="number" step="any" min="0" placeholder="Prix unit." class="col-span-3 border rounded-lg p-2 text-sm">
+                        <button type="button" onclick="ajouterLigneCommande()" class="col-span-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold">+</button>
+                    </div>
+                    <div id="nc-lignes" class="space-y-1 max-h-48 overflow-y-auto mb-2"></div>
+                    <div class="text-right font-bold text-gray-700">Total : <span id="nc-total">0 F</span></div>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="fermerModalCommande()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg">Annuler</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg">Créer la commande</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+        let cacheFournisseurs = [], cacheProduits = [], lignesNouvelleCommande = [];
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            afficherListeCommandes();
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+        function gererNonAutorise() { localStorage.clear(); window.location.href = "login.html"; }
+        function fmtF(n) { return Math.round(n || 0).toLocaleString() + " F"; }
+        function authHeaders(json) { return json ? { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" } : { "Authorization": `Bearer ${token}` }; }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: authHeaders() });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+
+        async function api(path, options = {}) {
+            const response = await fetch(`${API_URL}${path}`, options);
+            if (response.status === 401) { gererNonAutorise(); throw new Error("401"); }
+            if (response.status === 403) {
+                document.getElementById("contenu").innerHTML = `<div class="bg-white rounded-xl shadow p-8 text-center">
+                    <p class="text-red-500 font-bold text-lg mb-2">⛔ Accès réservé aux comptes administrateur</p>
+                    <a href="caisse.html" class="text-blue-600 hover:underline">Retour à la caisse</a>
+                </div>`;
+                throw new Error("403");
+            }
+            if (!response.ok) {
+                let detail = "Erreur serveur.";
+                try { detail = (await response.json()).detail || detail; } catch (e) {}
+                throw new Error(detail);
+            }
+            return response.status === 204 ? null : response.json();
+        }
+
+        const LABEL_STATUT = {
+            en_cours: '<span class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">En cours</span>',
+            partielle: '<span class="bg-orange-100 text-orange-600 text-xs font-bold px-2 py-1 rounded">Partielle</span>',
+            receptionnee: '<span class="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded">Reçue</span>',
+            annulee: '<span class="bg-gray-200 text-gray-500 text-xs font-bold px-2 py-1 rounded">Annulée</span>',
+        };
+
+        // ============== LISTE DES COMMANDES ==============
+        async function afficherListeCommandes() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                const commandes = await api("/commandes-fournisseurs", { headers: authHeaders() });
+                contenu.innerHTML = `
+                    <div class="flex justify-end mb-4">
+                        <button onclick="ouvrirModalCommande()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg">+ Nouvelle commande</button>
+                    </div>
+                    <div class="space-y-3" id="liste-commandes"></div>`;
+                const zone = document.getElementById("liste-commandes");
+                zone.innerHTML = commandes.length === 0 ? `<div class="bg-white rounded-xl shadow p-8 text-center text-gray-400 italic">Aucune commande pour l'instant.</div>` :
+                    commandes.map(c => `
+                        <div onclick="ouvrirDetailCommande(${c.id})" class="bg-white rounded-xl shadow p-4 cursor-pointer hover:shadow-md transition">
+                            <div class="flex justify-between items-start mb-1">
+                                <div>
+                                    <span class="font-bold text-gray-800">#${c.id} — ${c.fournisseur_nom || 'Fournisseur supprimé'}</span>
+                                    ${LABEL_STATUT[c.statut] || c.statut}
+                                </div>
+                                <span class="font-black text-gray-900">${fmtF(c.total)}</span>
+                            </div>
+                            <div class="text-xs text-gray-400">Commandée le ${c.date_commande}${c.note ? ' — ' + c.note : ''}</div>
+                            ${c.montant_paye > 0 ? `<div class="text-xs mt-1"><span class="text-green-600 font-bold">${fmtF(c.montant_paye)} payé</span>${c.reste_a_payer > 0 ? ` — <span class="text-orange-500 font-bold">${fmtF(c.reste_a_payer)} restant</span>` : ''}</div>` : ''}
+                        </div>`).join("");
+            } catch (e) { if (e.message !== "401" && e.message !== "403") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        // ============== NOUVELLE COMMANDE ==============
+        async function ouvrirModalCommande() {
+            lignesNouvelleCommande = [];
+            document.getElementById("nc-note").value = "";
+            rendreLignesNouvelleCommande();
+            try {
+                if (cacheFournisseurs.length === 0) cacheFournisseurs = await api("/fournisseurs", { headers: authHeaders() });
+                if (cacheProduits.length === 0) cacheProduits = await api("/produits/gestion", { headers: authHeaders() });
+                document.getElementById("nc-fournisseur").innerHTML = '<option value="">-- sélectionner --</option>' +
+                    cacheFournisseurs.map(f => `<option value="${f.id}">${f.nom}</option>`).join("");
+                document.getElementById("nc-produit-select").innerHTML = '<option value="">-- produit --</option>' +
+                    cacheProduits.filter(p => p.actif).map(p => `<option value="${p.id}" data-prix="${p.prix_achat}">${p.nom}</option>`).join("");
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); return; }
+            document.getElementById("modal-commande").classList.remove("hidden");
+        }
+        function fermerModalCommande() { document.getElementById("modal-commande").classList.add("hidden"); }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const sel = document.getElementById("nc-produit-select");
+            if (sel) sel.addEventListener("change", () => {
+                const opt = sel.options[sel.selectedIndex];
+                const prix = opt ? opt.dataset.prix : "";
+                if (prix && parseFloat(prix) > 0) document.getElementById("nc-prix").value = prix;
+            });
+        });
+
+        function ajouterLigneCommande() {
+            const select = document.getElementById("nc-produit-select");
+            const produitId = parseInt(select.value);
+            const qte = parseFloat(document.getElementById("nc-quantite").value);
+            const prix = parseFloat(document.getElementById("nc-prix").value);
+            if (!produitId || !qte || qte <= 0 || isNaN(prix) || prix < 0) { alert("⚠️ Sélectionne un produit, une quantité et un prix valides."); return; }
+            const produit = cacheProduits.find(p => p.id === produitId);
+            lignesNouvelleCommande.push({ produit_id: produitId, nom: produit.nom, quantite: qte, prix_unitaire: prix });
+            document.getElementById("nc-quantite").value = "";
+            document.getElementById("nc-prix").value = "";
+            select.value = "";
+            rendreLignesNouvelleCommande();
+        }
+
+        function retirerLigneCommande(index) { lignesNouvelleCommande.splice(index, 1); rendreLignesNouvelleCommande(); }
+
+        function rendreLignesNouvelleCommande() {
+            const zone = document.getElementById("nc-lignes");
+            zone.innerHTML = lignesNouvelleCommande.length === 0 ? '<p class="text-gray-400 text-xs italic">Aucun article ajouté.</p>' :
+                lignesNouvelleCommande.map((l, i) => `
+                    <div class="flex justify-between items-center bg-gray-50 px-2 py-1 rounded text-sm">
+                        <span>${l.nom} — ${l.quantite} x ${fmtF(l.prix_unitaire)}</span>
+                        <button type="button" onclick="retirerLigneCommande(${i})" class="text-red-400 hover:text-red-600 text-xs font-bold">✕</button>
+                    </div>`).join("");
+            const total = lignesNouvelleCommande.reduce((s, l) => s + l.quantite * l.prix_unitaire, 0);
+            document.getElementById("nc-total").innerText = fmtF(total);
+        }
+
+        async function creerCommande(event) {
+            event.preventDefault();
+            if (lignesNouvelleCommande.length === 0) { alert("⚠️ Ajoute au moins un article."); return; }
+            const payload = {
+                fournisseur_id: parseInt(document.getElementById("nc-fournisseur").value),
+                note: document.getElementById("nc-note").value,
+                lignes: lignesNouvelleCommande.map(l => ({ produit_id: l.produit_id, quantite: l.quantite, prix_unitaire: l.prix_unitaire })),
+            };
+            try {
+                await api("/commandes-fournisseurs", { method: "POST", headers: authHeaders(true), body: JSON.stringify(payload) });
+                fermerModalCommande();
+                afficherListeCommandes();
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        // ============== DETAIL D'UNE COMMANDE ==============
+        async function ouvrirDetailCommande(id) {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                const data = await api(`/commandes-fournisseurs/${id}`, { headers: authHeaders() });
+                const c = data.commande;
+                contenu.innerHTML = `
+                    <button onclick="afficherListeCommandes()" class="text-blue-600 hover:underline text-sm font-bold mb-4">⬅ Toutes les commandes</button>
+
+                    <div class="bg-white rounded-xl shadow p-6 mb-4">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h2 class="text-lg font-bold text-gray-800">Commande #${c.id} — ${c.fournisseur_nom}</h2>
+                                <div class="text-xs text-gray-400">Commandée le ${c.date_commande}${c.note ? ' — ' + c.note : ''}</div>
+                            </div>
+                            ${LABEL_STATUT[c.statut] || c.statut}
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 text-sm mb-3">
+                            <div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-400 font-bold uppercase">Total</div><div class="font-black text-gray-900">${fmtF(c.total)}</div></div>
+                            <div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-400 font-bold uppercase">Payé</div><div class="font-black text-green-600">${fmtF(c.montant_paye)}</div></div>
+                            <div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-400 font-bold uppercase">Reste à payer</div><div class="font-black text-orange-500">${fmtF(c.reste_a_payer)}</div></div>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            ${c.reste_a_payer > 0 ? `<button onclick="ouvrirPaiement(${c.id}, ${c.reste_a_payer})" class="bg-green-600 hover:bg-green-700 text-white text-sm font-bold px-4 py-2 rounded-lg">💳 Enregistrer un paiement</button>` : ''}
+                            ${c.statut === 'en_cours' ? `<button onclick="confirmerAnnulation(${c.id})" class="bg-red-50 hover:bg-red-100 text-red-600 text-sm font-bold px-4 py-2 rounded-lg">Annuler la commande</button>` : ''}
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow p-4 sm:p-6">
+                        <h3 class="text-sm font-bold text-gray-500 uppercase mb-3">Articles</h3>
+                        <table class="w-full text-sm mb-4">
+                            <thead><tr class="text-gray-400 uppercase text-xs border-b">
+                                <th class="text-left p-2">Produit</th><th class="text-right p-2">Commandé</th>
+                                <th class="text-right p-2">Reçu</th><th class="text-right p-2">Reste</th><th class="text-right p-2">PU</th>
+                            </tr></thead>
+                            <tbody class="divide-y" id="lignes-detail-commande">
+                                ${data.lignes.map(l => `
+                                    <tr>
+                                        <td class="p-2 font-bold">${l.produit_nom}</td>
+                                        <td class="p-2 text-right">${l.quantite} ${l.unite}</td>
+                                        <td class="p-2 text-right text-green-600">${l.quantite_recue}</td>
+                                        <td class="p-2 text-right ${l.reste_a_recevoir > 0 ? 'text-orange-500 font-bold' : 'text-gray-300'}">${l.reste_a_recevoir}</td>
+                                        <td class="p-2 text-right">${fmtF(l.prix_unitaire)}</td>
+                                    </tr>`).join("")}
+                            </tbody>
+                        </table>
+                        ${(c.statut === 'en_cours' || c.statut === 'partielle') ? `
+                            <div class="border-t pt-4">
+                                <h3 class="text-sm font-bold text-gray-500 uppercase mb-3">Enregistrer une réception</h3>
+                                <div id="form-reception" class="space-y-2 mb-3">
+                                    ${data.lignes.filter(l => l.reste_a_recevoir > 0).map(l => `
+                                        <div class="flex justify-between items-center gap-2">
+                                            <span class="text-sm flex-1">${l.produit_nom} <span class="text-gray-400">(reste ${l.reste_a_recevoir} ${l.unite})</span></span>
+                                            <input type="number" step="any" min="0" max="${l.reste_a_recevoir}" data-ligne-id="${l.id}" data-max="${l.reste_a_recevoir}"
+                                                   class="reception-input w-28 border rounded p-1 text-right" placeholder="0">
+                                        </div>`).join("")}
+                                </div>
+                                <button onclick="validerReception(${c.id})" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg">✅ Valider la réception</button>
+                            </div>` : ''}
+                    </div>`;
+            } catch (e) { if (e.message !== "401" && e.message !== "403") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        async function validerReception(commandeId) {
+            const inputs = document.querySelectorAll(".reception-input");
+            const lignes = [];
+            for (const input of inputs) {
+                const val = parseFloat(input.value);
+                if (val && val > 0) {
+                    const max = parseFloat(input.dataset.max);
+                    if (val > max) { alert(`⚠️ Quantité trop élevée pour une ligne (max ${max}).`); return; }
+                    lignes.push({ ligne_id: parseInt(input.dataset.ligneId), quantite_recue: val });
+                }
+            }
+            if (lignes.length === 0) { alert("⚠️ Renseigne au moins une quantité reçue."); return; }
+            try {
+                await api(`/commandes-fournisseurs/${commandeId}/reception`, { method: "POST", headers: authHeaders(true), body: JSON.stringify({ lignes }) });
+                alert("✅ Réception enregistrée — stock mis à jour.");
+                ouvrirDetailCommande(commandeId);
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        function ouvrirPaiement(commandeId, resteAPayer) {
+            const montant = prompt(`Montant payé (reste à payer : ${fmtF(resteAPayer)}) :`);
+            if (!montant) return;
+            const val = parseFloat(montant);
+            if (isNaN(val) || val <= 0) { alert("⚠️ Montant invalide."); return; }
+            enregistrerPaiement(commandeId, val);
+        }
+
+        async function enregistrerPaiement(commandeId, montant) {
+            try {
+                await api(`/commandes-fournisseurs/${commandeId}/paiement`, { method: "POST", headers: authHeaders(true), body: JSON.stringify({ montant }) });
+                ouvrirDetailCommande(commandeId);
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        function confirmerAnnulation(commandeId) {
+            if (!confirm("Annuler cette commande ? Cette action est irréversible.")) return;
+            annulerCommande(commandeId);
+        }
+
+        async function annulerCommande(commandeId) {
+            try {
+                await api(`/commandes-fournisseurs/${commandeId}/annuler`, { method: "POST", headers: authHeaders() });
+                afficherListeCommandes();
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+    </script>
+</body>
+</html>

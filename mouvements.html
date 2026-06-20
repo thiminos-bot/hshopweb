@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Mouvements de stock</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">🔄 HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── MOUVEMENTS DE STOCK</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <main class="p-4 sm:p-6 max-w-5xl mx-auto">
+        <div class="flex flex-col sm:flex-row gap-3 mb-4">
+            <input id="recherche-produit" oninput="chargerMouvementsDebounce()" placeholder="🔍 Filtrer par produit..." class="border rounded-lg p-2 flex-1">
+            <select id="filtre-type" onchange="chargerMouvements()" class="border rounded-lg p-2 bg-white">
+                <option value="">Tous les types</option>
+                <option value="SORTIE_VENTE">Vente</option>
+                <option value="ENTREE_MANUELLE">Appro manuel</option>
+                <option value="ENTREE_INITIALE">Création produit</option>
+                <option value="inventaire_moins">Inventaire (−)</option>
+                <option value="inventaire_plus">Inventaire (+)</option>
+                <option value="RETOUR_ANNULATION">Retour/Annulation</option>
+                <option value="IMPORT_EXCEL">Import Excel</option>
+                <option value="SORTIE_MANUELLE">Sortie manuelle</option>
+            </select>
+        </div>
+
+        <div class="bg-white rounded-xl shadow overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead><tr class="text-gray-400 uppercase text-xs border-b">
+                    <th class="p-3">Date</th><th class="p-3">Produit</th><th class="p-3">Type</th>
+                    <th class="p-3 text-right">Qté</th><th class="p-3 text-right">Stock</th>
+                    <th class="p-3">Opérateur</th><th class="p-3">Référence</th>
+                </tr></thead>
+                <tbody id="table-mouvements" class="divide-y">
+                    <tr><td colspan="7" class="p-6 text-center text-gray-400 italic">Chargement...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-400 mt-3 text-center">200 mouvements les plus récents affichés.</p>
+    </main>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            chargerMouvements();
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+        function gererNonAutorise() { localStorage.clear(); window.location.href = "login.html"; }
+        function arrondi(n) { return Math.round((n || 0) * 100) / 100; } // nettoie le bruit flottant (ex: -7.1e-15)
+
+        const LABELS_TYPE = {
+            "SORTIE_VENTE": "Vente", "ENTREE_MANUELLE": "Appro manuel", "ENTREE_INITIALE": "Création produit",
+            "inventaire_moins": "Inventaire (−)", "inventaire_plus": "Inventaire (+)",
+            "RETOUR_ANNULATION": "Retour/Annulation", "IMPORT_EXCEL": "Import Excel", "SORTIE_MANUELLE": "Sortie manuelle",
+            "ENTREE": "Entrée",
+        };
+
+        let timerRecherche = null;
+        function chargerMouvementsDebounce() { clearTimeout(timerRecherche); timerRecherche = setTimeout(chargerMouvements, 300); }
+
+        async function chargerMouvements() {
+            const corps = document.getElementById("table-mouvements");
+            corps.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-gray-400 italic">Chargement...</td></tr>`;
+            const produit = document.getElementById("recherche-produit").value;
+            const type = document.getElementById("filtre-type").value;
+            const params = new URLSearchParams({ limite: "200" });
+            if (produit) params.set("produit", produit);
+            if (type) params.set("type_mouvement", type);
+            try {
+                const response = await fetch(`${API_URL}/mouvements-stock?${params}`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error();
+                const liste = await response.json();
+                corps.innerHTML = liste.length === 0 ? `<tr><td colspan="7" class="p-6 text-center text-gray-400 italic">Aucun mouvement.</td></tr>` :
+                    liste.map(m => {
+                        const qte = arrondi(m.quantite);
+                        return `
+                        <tr>
+                            <td class="p-3 text-xs text-gray-500">${m.date_mouvement}</td>
+                            <td class="p-3 font-bold">${m.produit_nom}</td>
+                            <td class="p-3"><span class="bg-gray-100 text-xs px-2 py-1 rounded font-bold">${LABELS_TYPE[m.type_mouvement] || m.type_mouvement}</span></td>
+                            <td class="p-3 text-right font-bold ${qte < 0 ? 'text-red-600' : 'text-green-600'}">${qte > 0 ? '+' : ''}${qte}</td>
+                            <td class="p-3 text-right text-xs text-gray-400">${arrondi(m.stock_avant)} → ${arrondi(m.stock_apres)}</td>
+                            <td class="p-3 text-xs text-gray-500">${m.operateur || '-'}</td>
+                            <td class="p-3 text-xs text-gray-400">${m.reference_doc || (m.vente_id ? 'Vente #' + m.vente_id : '-')}</td>
+                        </tr>`;
+                    }).join("");
+            } catch (e) { corps.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-red-500">Erreur de chargement.</td></tr>`; }
+        }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+    </script>
+</body>
+</html>

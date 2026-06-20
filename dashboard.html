@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Dashboard Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">📊 HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── DASHBOARD MANAGER</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <button onclick="chargerStats()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🔄</button>
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <main id="contenu" class="p-4 sm:p-6 max-w-6xl mx-auto">
+        <p class="text-gray-400 italic text-center py-10">Chargement des statistiques...</p>
+    </main>
+
+    <!-- Gabarits cachés, remplis et déplacés dans #contenu par le JS -->
+    <template id="tpl-dashboard">
+        <div class="space-y-6">
+
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div class="bg-white rounded-xl shadow p-4">
+                    <div class="text-xs font-bold text-gray-400 uppercase">CA du jour</div>
+                    <div id="kpi-ca-jour" class="text-2xl font-black text-gray-900 mt-1">-</div>
+                    <div id="kpi-variation" class="text-xs font-bold mt-1"></div>
+                </div>
+                <div class="bg-white rounded-xl shadow p-4">
+                    <div class="text-xs font-bold text-gray-400 uppercase">CA du mois</div>
+                    <div id="kpi-ca-mois" class="text-2xl font-black text-gray-900 mt-1">-</div>
+                    <div id="kpi-nb-ventes" class="text-xs text-gray-400 mt-1"></div>
+                </div>
+                <div class="bg-white rounded-xl shadow p-4">
+                    <div class="text-xs font-bold text-gray-400 uppercase">Panier moyen</div>
+                    <div id="kpi-panier-moyen" class="text-2xl font-black text-gray-900 mt-1">-</div>
+                    <div class="text-xs text-gray-400 mt-1">ce mois-ci</div>
+                </div>
+                <div class="bg-white rounded-xl shadow p-4 border-l-4 border-green-500">
+                    <div class="text-xs font-bold text-gray-400 uppercase">Net caisse (jour)</div>
+                    <div id="kpi-net-caisse" class="text-2xl font-black text-green-700 mt-1">-</div>
+                    <div id="kpi-depenses" class="text-xs text-gray-400 mt-1"></div>
+                </div>
+            </div>
+
+            <!-- Graphique 7 jours -->
+            <div class="bg-white rounded-xl shadow p-4 sm:p-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-4">Chiffre d'affaires — 7 derniers jours</h2>
+                <div id="graphique-7j" class="flex items-end gap-2 sm:gap-3 h-40"></div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Modes de paiement -->
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">Modes de paiement <span class="text-xs text-gray-400 font-normal">(30 derniers jours)</span></h2>
+                    <div id="modes-paiement" class="space-y-3"></div>
+                </div>
+
+                <!-- Top produits -->
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-1">Top produits</h2>
+                    <p id="periode-top" class="text-xs text-gray-400 mb-3"></p>
+                    <div id="top-produits" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- Dernières ventes -->
+            <div class="bg-white rounded-xl shadow p-4 sm:p-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-4">Dernières ventes</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="text-gray-400 uppercase text-xs border-b">
+                                <th class="p-2">#</th><th class="p-2">Date</th><th class="p-2">Vendeur</th><th class="p-2">Mode</th><th class="p-2 text-right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dernieres-ventes" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Stock bas -->
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">⚠️ Alertes stock bas</h2>
+                    <div id="stock-bas" class="space-y-2"></div>
+                </div>
+
+                <!-- Crédits impayés -->
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-1">💳 Crédits impayés</h2>
+                    <p id="total-impaye" class="text-sm font-bold text-red-600 mb-3"></p>
+                    <div id="credits-impayes" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            chargerStats();
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+
+        function fmtF(n) { return Math.round(n || 0).toLocaleString() + " F"; }
+
+        async function chargerStats() {
+            const contenu = document.getElementById("contenu");
+            try {
+                const response = await fetch(`${API_URL}/api/dashboard/stats`, { headers: { "Authorization": `Bearer ${token}` } });
+
+                if (response.status === 401) { localStorage.clear(); window.location.href = "login.html"; return; }
+                if (response.status === 403) {
+                    contenu.innerHTML = `<div class="bg-white rounded-xl shadow p-8 text-center">
+                        <p class="text-red-500 font-bold text-lg mb-2">⛔ Accès réservé aux comptes administrateur</p>
+                        <a href="caisse.html" class="text-blue-600 hover:underline">Retour à la caisse</a>
+                    </div>`;
+                    return;
+                }
+                if (!response.ok) throw new Error();
+
+                const stats = await response.json();
+                const tpl = document.getElementById("tpl-dashboard").content.cloneNode(true);
+                contenu.innerHTML = "";
+                contenu.appendChild(tpl);
+                remplirDashboard(stats);
+            } catch (e) {
+                contenu.innerHTML = `<div class="bg-white rounded-xl shadow p-8 text-center text-red-500 font-bold">Erreur de chargement des statistiques.</div>`;
+            }
+        }
+
+        function remplirDashboard(s) {
+            document.getElementById("kpi-ca-jour").innerText = fmtF(s.ca_jour);
+            const varEl = document.getElementById("kpi-variation");
+            if (s.variation_pct === null || s.variation_pct === undefined) {
+                varEl.innerText = "Pas de vente hier pour comparer";
+                varEl.className = "text-xs text-gray-400 mt-1";
+            } else {
+                const positif = s.variation_pct >= 0;
+                varEl.innerText = (positif ? "▲ +" : "▼ ") + s.variation_pct + "% vs hier";
+                varEl.className = "text-xs font-bold mt-1 " + (positif ? "text-green-600" : "text-red-500");
+            }
+
+            document.getElementById("kpi-ca-mois").innerText = fmtF(s.ca_mois);
+            document.getElementById("kpi-nb-ventes").innerText = s.nb_ventes_mois + " ventes ce mois";
+            document.getElementById("kpi-panier-moyen").innerText = fmtF(s.panier_moyen_mois);
+            document.getElementById("kpi-net-caisse").innerText = fmtF(s.net_caisse_jour);
+            document.getElementById("kpi-depenses").innerText = "Dépenses jour : " + fmtF(s.depenses_jour);
+
+            // Graphique 7 jours — barres CSS simples
+            const graph = document.getElementById("graphique-7j");
+            const maxCa = Math.max(...s.graphique_7j.map(j => j.ca), 1);
+            graph.innerHTML = "";
+            s.graphique_7j.forEach(j => {
+                const hauteurPct = Math.max(4, Math.round((j.ca / maxCa) * 100));
+                const jourLabel = new Date(j.jour + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short" });
+                const col = document.createElement("div");
+                col.className = "flex-1 flex flex-col items-center justify-end h-full";
+                col.innerHTML = `
+                    <div class="text-[10px] font-bold text-gray-500 mb-1">${j.ca > 0 ? Math.round(j.ca / 1000) + 'k' : ''}</div>
+                    <div class="w-full bg-blue-500 rounded-t" style="height:${hauteurPct}%"></div>
+                    <div class="text-[10px] text-gray-400 mt-1 capitalize">${jourLabel}</div>
+                `;
+                graph.appendChild(col);
+            });
+
+            // Modes de paiement
+            const modesDiv = document.getElementById("modes-paiement");
+            const maxMode = Math.max(...s.modes_paiement.map(m => m.total), 1);
+            modesDiv.innerHTML = s.modes_paiement.length === 0
+                ? '<p class="text-gray-400 italic text-sm">Aucune vente sur la période.</p>'
+                : s.modes_paiement.map(m => `
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="font-bold text-gray-700">${m.mode}</span>
+                            <span class="text-gray-500">${fmtF(m.total)} <span class="text-gray-400">(${m.nb})</span></span>
+                        </div>
+                        <div class="w-full bg-gray-100 rounded-full h-2">
+                            <div class="bg-blue-500 h-2 rounded-full" style="width:${Math.round(m.total / maxMode * 100)}%"></div>
+                        </div>
+                    </div>
+                `).join("");
+
+            // Top produits
+            document.getElementById("periode-top").innerText = "Sur : " + s.periode_top;
+            const topDiv = document.getElementById("top-produits");
+            topDiv.innerHTML = s.top_produits.length === 0
+                ? '<p class="text-gray-400 italic text-sm">Aucune vente récente.</p>'
+                : s.top_produits.map((p, i) => `
+                    <div class="flex justify-between items-center text-sm border-b pb-2">
+                        <span><span class="text-gray-400 font-bold mr-2">#${i + 1}</span>${p.nom} <span class="text-gray-400">x${p.quantite}</span></span>
+                        <span class="font-bold text-gray-900">${fmtF(p.total)}</span>
+                    </div>
+                `).join("");
+
+            // Dernières ventes
+            const ventesBody = document.getElementById("dernieres-ventes");
+            ventesBody.innerHTML = s.dernieres_ventes.map(v => `
+                <tr>
+                    <td class="p-2 font-bold text-blue-600">#${v.id}</td>
+                    <td class="p-2 text-gray-500">${v.date_vente}</td>
+                    <td class="p-2"><span class="bg-gray-100 px-2 py-0.5 rounded text-xs font-bold">${v.vendeur || '-'}</span></td>
+                    <td class="p-2 text-xs font-bold">${v.mode_paiement}</td>
+                    <td class="p-2 text-right font-bold">${fmtF(v.total)}</td>
+                </tr>
+            `).join("");
+
+            // Stock bas
+            const stockDiv = document.getElementById("stock-bas");
+            stockDiv.innerHTML = s.stock_bas.length === 0
+                ? '<p class="text-green-600 text-sm">✅ Rien à signaler.</p>'
+                : s.stock_bas.map(p => `
+                    <div class="flex justify-between items-center text-sm border-b pb-2">
+                        <span>${p.nom}</span>
+                        <span class="font-bold ${p.stock <= 0 ? 'text-red-600' : 'text-orange-500'}">${p.stock} ${p.unite}</span>
+                    </div>
+                `).join("");
+
+            // Crédits impayés
+            document.getElementById("total-impaye").innerText = s.credits_impayes.length > 0 ? "Total : " + fmtF(s.total_impaye) : "";
+            const creditsDiv = document.getElementById("credits-impayes");
+            creditsDiv.innerHTML = s.credits_impayes.length === 0
+                ? '<p class="text-green-600 text-sm">✅ Aucun impayé.</p>'
+                : s.credits_impayes.map(c => `
+                    <div class="flex justify-between items-center text-sm border-b pb-2">
+                        <span>${c.nom} ${c.telephone ? '<span class="text-gray-400 text-xs">(' + c.telephone + ')</span>' : ''}</span>
+                        <span class="font-bold text-red-600">${fmtF(c.solde)}</span>
+                    </div>
+                `).join("");
+        }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+    </script>
+</body>
+</html>

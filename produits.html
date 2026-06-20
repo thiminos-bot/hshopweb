@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Gestion Produits</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">🗂️ HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── GESTION PRODUITS</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <nav class="bg-white border-b px-4 sm:px-6 flex gap-2 sticky top-[60px] z-10">
+        <button onclick="changerOnglet('produits')" id="btn-onglet-produits" class="px-4 py-3 text-sm font-bold border-b-4 border-blue-600 text-blue-600">Produits</button>
+        <button onclick="changerOnglet('categories')" id="btn-onglet-categories" class="px-4 py-3 text-sm font-bold border-b-4 border-transparent text-gray-500 hover:text-gray-800">Catégories</button>
+        <button onclick="changerOnglet('fournisseurs')" id="btn-onglet-fournisseurs" class="px-4 py-3 text-sm font-bold border-b-4 border-transparent text-gray-500 hover:text-gray-800">Fournisseurs</button>
+    </nav>
+
+    <main id="contenu" class="p-4 sm:p-6 max-w-6xl mx-auto">
+        <p class="text-gray-400 italic text-center py-10">Chargement...</p>
+    </main>
+
+    <!-- ===== MODAL PRODUIT ===== -->
+    <div id="modal-produit" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <h2 id="modal-produit-titre" class="text-lg font-bold text-gray-800 mb-4">Nouveau produit</h2>
+            <form id="form-produit" onsubmit="enregistrerProduit(event)" class="space-y-3">
+                <input type="hidden" id="p-id">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Nom *</label>
+                    <input id="p-nom" required class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Code-barre</label>
+                        <input id="p-code-barre" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Code interne</label>
+                        <input id="p-code" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Prix achat</label>
+                        <input id="p-prix-achat" type="number" step="any" min="0" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Prix vente *</label>
+                        <input id="p-prix-vente" type="number" step="any" min="0" required class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                </div>
+                <div id="p-stock-initial-bloc" class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Stock initial</label>
+                        <input id="p-stock-initial" type="number" step="any" min="0" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Unité</label>
+                        <input id="p-unite" value="pce" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                </div>
+                <p id="p-stock-note" class="hidden text-xs text-gray-400 italic">Le stock se modifie depuis l'onglet Stock (bouton appro) — pas ici, pour garder l'historique des mouvements.</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Stock min (alerte)</label>
+                        <input id="p-stock-min" type="number" step="any" min="0" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Seuil alerte</label>
+                        <input id="p-seuil-alerte" type="number" step="any" min="0" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Catégorie</label>
+                        <select id="p-categorie" class="w-full border rounded-lg p-2 mt-1 bg-white"><option value="">-- aucune --</option></select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Fournisseur</label>
+                        <select id="p-fournisseur" class="w-full border rounded-lg p-2 mt-1 bg-white"><option value="">-- aucun --</option></select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Description</label>
+                    <textarea id="p-description" rows="2" class="w-full border rounded-lg p-2 mt-1"></textarea>
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="fermerModalProduit()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg">Annuler</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== MODAL CATEGORIE ===== -->
+    <div id="modal-categorie" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <h2 id="modal-categorie-titre" class="text-lg font-bold text-gray-800 mb-4">Nouvelle catégorie</h2>
+            <form onsubmit="enregistrerCategorie(event)" class="space-y-3">
+                <input type="hidden" id="c-id">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Nom *</label>
+                    <input id="c-nom" required class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Description</label>
+                    <input id="c-description" class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="fermerModalCategorie()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg">Annuler</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== MODAL FOURNISSEUR ===== -->
+    <div id="modal-fournisseur" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h2 id="modal-fournisseur-titre" class="text-lg font-bold text-gray-800 mb-4">Nouveau fournisseur</h2>
+            <form onsubmit="enregistrerFournisseur(event)" class="space-y-3">
+                <input type="hidden" id="f-id">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Nom *</label>
+                    <input id="f-nom" required class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Contact</label>
+                        <input id="f-contact" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Téléphone</label>
+                        <input id="f-telephone" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Email</label>
+                    <input id="f-email" type="email" class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Adresse</label>
+                    <input id="f-adresse" class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Notes</label>
+                    <textarea id="f-notes" rows="2" class="w-full border rounded-lg p-2 mt-1"></textarea>
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="fermerModalFournisseur()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg">Annuler</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+        let ongletActif = "produits";
+        let cacheProduits = [], cacheCategories = [], cacheFournisseurs = [];
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            changerOnglet("produits");
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+        function gererNonAutorise() { localStorage.clear(); window.location.href = "login.html"; }
+        function authHeaders(json) { return json ? { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" } : { "Authorization": `Bearer ${token}` }; }
+
+        async function api(path, options = {}) {
+            const response = await fetch(`${API_URL}${path}`, options);
+            if (response.status === 401) { gererNonAutorise(); throw new Error("401"); }
+            if (response.status === 403) {
+                document.getElementById("contenu").innerHTML = `<div class="bg-white rounded-xl shadow p-8 text-center">
+                    <p class="text-red-500 font-bold text-lg mb-2">⛔ Accès réservé aux comptes administrateur</p>
+                    <a href="caisse.html" class="text-blue-600 hover:underline">Retour à la caisse</a>
+                </div>`;
+                throw new Error("403");
+            }
+            if (!response.ok) {
+                let detail = "Erreur serveur.";
+                try { detail = (await response.json()).detail || detail; } catch (e) {}
+                throw new Error(detail);
+            }
+            return response.status === 204 ? null : response.json();
+        }
+
+        function changerOnglet(nom) {
+            ongletActif = nom;
+            ["produits", "categories", "fournisseurs"].forEach(o => {
+                document.getElementById("btn-onglet-" + o).className = o === nom
+                    ? "px-4 py-3 text-sm font-bold border-b-4 border-blue-600 text-blue-600"
+                    : "px-4 py-3 text-sm font-bold border-b-4 border-transparent text-gray-500 hover:text-gray-800";
+            });
+            if (nom === "produits") afficherOngletProduits();
+            else if (nom === "categories") afficherOngletCategories();
+            else afficherOngletFournisseurs();
+        }
+
+        // ============== PRODUITS ==============
+        async function afficherOngletProduits() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                const [produits, categories, fournisseurs] = await Promise.all([
+                    api("/produits/gestion", { headers: authHeaders() }),
+                    api("/categories", { headers: authHeaders() }),
+                    api("/fournisseurs", { headers: authHeaders() }),
+                ]);
+                cacheProduits = produits; cacheCategories = categories; cacheFournisseurs = fournisseurs;
+                remplirSelectsProduit();
+
+                contenu.innerHTML = `
+                    <div class="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center mb-4">
+                        <input id="recherche-produit" oninput="filtrerProduits()" placeholder="🔍 Rechercher un produit..." class="border rounded-lg p-2 flex-1">
+                        <button onclick="ouvrirModalProduit()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg whitespace-nowrap">+ Nouveau produit</button>
+                    </div>
+                    <div class="bg-white rounded-xl shadow overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr class="text-gray-400 uppercase text-xs border-b">
+                                <th class="p-3">Nom</th><th class="p-3">Catégorie</th><th class="p-3">Fournisseur</th>
+                                <th class="p-3 text-right">Prix vente</th><th class="p-3 text-right">Stock</th>
+                                <th class="p-3">Statut</th><th class="p-3 text-right">Actions</th>
+                            </tr></thead>
+                            <tbody id="table-produits" class="divide-y"></tbody>
+                        </table>
+                    </div>`;
+                rendreTableProduits(cacheProduits);
+            } catch (e) { if (e.message !== "401" && e.message !== "403") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        function filtrerProduits() {
+            const q = document.getElementById("recherche-produit").value.toLowerCase();
+            rendreTableProduits(cacheProduits.filter(p => p.nom.toLowerCase().includes(q) || (p.code_barre || "").toLowerCase().includes(q)));
+        }
+
+        function rendreTableProduits(liste) {
+            const body = document.getElementById("table-produits");
+            if (liste.length === 0) { body.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-gray-400 italic">Aucun produit.</td></tr>`; return; }
+            body.innerHTML = liste.map(p => `
+                <tr class="${p.actif ? '' : 'opacity-50'}">
+                    <td class="p-3 font-bold">${p.nom}</td>
+                    <td class="p-3 text-gray-500">${p.categorie_nom || '-'}</td>
+                    <td class="p-3 text-gray-500">${p.fournisseur_nom || '-'}</td>
+                    <td class="p-3 text-right">${p.prix_vente.toLocaleString()} F</td>
+                    <td class="p-3 text-right">${p.stock_actuel} ${p.unite}</td>
+                    <td class="p-3">${p.actif ? '<span class="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded">Actif</span>' : '<span class="bg-gray-200 text-gray-500 text-xs font-bold px-2 py-1 rounded">Désactivé</span>'}</td>
+                    <td class="p-3 text-right whitespace-nowrap">
+                        <button onclick="ouvrirModalProduit(${p.id})" class="text-blue-600 hover:underline text-xs font-bold mr-3">Modifier</button>
+                        <button onclick="toggleStatutProduit(${p.id}, ${p.actif})" class="text-xs font-bold ${p.actif ? 'text-red-500' : 'text-green-600'} hover:underline">${p.actif ? 'Désactiver' : 'Activer'}</button>
+                    </td>
+                </tr>`).join("");
+        }
+
+        function remplirSelectsProduit() {
+            const selCat = document.getElementById("p-categorie"), selFour = document.getElementById("p-fournisseur");
+            selCat.innerHTML = '<option value="">-- aucune --</option>' + cacheCategories.map(c => `<option value="${c.id}">${c.nom}</option>`).join("");
+            selFour.innerHTML = '<option value="">-- aucun --</option>' + cacheFournisseurs.map(f => `<option value="${f.id}">${f.nom}</option>`).join("");
+        }
+
+        function ouvrirModalProduit(id) {
+            const estModif = !!id;
+            document.getElementById("modal-produit-titre").innerText = estModif ? "Modifier le produit" : "Nouveau produit";
+            document.getElementById("p-stock-initial-bloc").classList.toggle("hidden", estModif);
+            document.getElementById("p-stock-note").classList.toggle("hidden", !estModif);
+            document.getElementById("form-produit").reset();
+            document.getElementById("p-id").value = id || "";
+
+            if (estModif) {
+                const p = cacheProduits.find(x => x.id === id);
+                document.getElementById("p-nom").value = p.nom;
+                document.getElementById("p-code-barre").value = p.code_barre || "";
+                document.getElementById("p-code").value = p.code || "";
+                document.getElementById("p-prix-achat").value = p.prix_achat || 0;
+                document.getElementById("p-prix-vente").value = p.prix_vente || 0;
+                document.getElementById("p-stock-min").value = p.stock_min || 0;
+                document.getElementById("p-seuil-alerte").value = p.seuil_alerte || 0;
+                document.getElementById("p-unite").value = p.unite || "pce";
+                document.getElementById("p-description").value = p.description || "";
+                document.getElementById("p-categorie").value = p.categorie_id || "";
+                document.getElementById("p-fournisseur").value = p.fournisseur_id || "";
+            } else {
+                document.getElementById("p-unite").value = "pce";
+            }
+            document.getElementById("modal-produit").classList.remove("hidden");
+        }
+        function fermerModalProduit() { document.getElementById("modal-produit").classList.add("hidden"); }
+
+        async function enregistrerProduit(event) {
+            event.preventDefault();
+            const id = document.getElementById("p-id").value;
+            const payload = {
+                nom: document.getElementById("p-nom").value,
+                code_barre: document.getElementById("p-code-barre").value,
+                code: document.getElementById("p-code").value,
+                prix_achat: parseFloat(document.getElementById("p-prix-achat").value) || 0,
+                prix_vente: parseFloat(document.getElementById("p-prix-vente").value) || 0,
+                stock_min: parseFloat(document.getElementById("p-stock-min").value) || 0,
+                seuil_alerte: parseFloat(document.getElementById("p-seuil-alerte").value) || 0,
+                unite: document.getElementById("p-unite").value || "pce",
+                description: document.getElementById("p-description").value,
+                categorie_id: document.getElementById("p-categorie").value ? parseInt(document.getElementById("p-categorie").value) : null,
+                fournisseur_id: document.getElementById("p-fournisseur").value ? parseInt(document.getElementById("p-fournisseur").value) : null,
+            };
+            if (!id) payload.stock_actuel = parseFloat(document.getElementById("p-stock-initial").value) || 0;
+
+            try {
+                if (id) {
+                    await api(`/produits/${id}`, { method: "PUT", headers: authHeaders(true), body: JSON.stringify(payload) });
+                } else {
+                    await api("/produits", { method: "POST", headers: authHeaders(true), body: JSON.stringify(payload) });
+                }
+                fermerModalProduit();
+                afficherOngletProduits();
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        async function toggleStatutProduit(id, actifActuel) {
+            const nouveauStatut = !actifActuel;
+            if (!confirm(nouveauStatut ? "Réactiver ce produit ?" : "Désactiver ce produit ? Il n'apparaîtra plus en caisse.")) return;
+            try {
+                await api(`/produits/${id}/statut`, { method: "PATCH", headers: authHeaders(true), body: JSON.stringify({ actif: nouveauStatut }) });
+                afficherOngletProduits();
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        // ============== CATEGORIES ==============
+        async function afficherOngletCategories() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                cacheCategories = await api("/categories", { headers: authHeaders() });
+                contenu.innerHTML = `
+                    <div class="flex justify-end mb-4"><button onclick="ouvrirModalCategorie()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg">+ Nouvelle catégorie</button></div>
+                    <div class="bg-white rounded-xl shadow overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr class="text-gray-400 uppercase text-xs border-b"><th class="p-3">Nom</th><th class="p-3">Description</th><th class="p-3 text-right">Actions</th></tr></thead>
+                            <tbody id="table-categories" class="divide-y"></tbody>
+                        </table>
+                    </div>`;
+                const body = document.getElementById("table-categories");
+                body.innerHTML = cacheCategories.length === 0 ? `<tr><td colspan="3" class="p-6 text-center text-gray-400 italic">Aucune catégorie.</td></tr>` :
+                    cacheCategories.map(c => `
+                        <tr>
+                            <td class="p-3 font-bold">${c.nom}</td>
+                            <td class="p-3 text-gray-500">${c.description || '-'}</td>
+                            <td class="p-3 text-right whitespace-nowrap">
+                                <button onclick="ouvrirModalCategorie(${c.id})" class="text-blue-600 hover:underline text-xs font-bold mr-3">Modifier</button>
+                                <button onclick="supprimerCategorie(${c.id})" class="text-red-500 hover:underline text-xs font-bold">Supprimer</button>
+                            </td>
+                        </tr>`).join("");
+            } catch (e) { if (e.message !== "401" && e.message !== "403") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        function ouvrirModalCategorie(id) {
+            document.getElementById("modal-categorie-titre").innerText = id ? "Modifier la catégorie" : "Nouvelle catégorie";
+            document.getElementById("c-id").value = id || "";
+            if (id) {
+                const c = cacheCategories.find(x => x.id === id);
+                document.getElementById("c-nom").value = c.nom;
+                document.getElementById("c-description").value = c.description || "";
+            } else { document.getElementById("c-nom").value = ""; document.getElementById("c-description").value = ""; }
+            document.getElementById("modal-categorie").classList.remove("hidden");
+        }
+        function fermerModalCategorie() { document.getElementById("modal-categorie").classList.add("hidden"); }
+
+        async function enregistrerCategorie(event) {
+            event.preventDefault();
+            const id = document.getElementById("c-id").value;
+            const payload = { nom: document.getElementById("c-nom").value, description: document.getElementById("c-description").value };
+            try {
+                if (id) await api(`/categories/${id}`, { method: "PUT", headers: authHeaders(true), body: JSON.stringify(payload) });
+                else await api("/categories", { method: "POST", headers: authHeaders(true), body: JSON.stringify(payload) });
+                fermerModalCategorie();
+                afficherOngletCategories();
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        async function supprimerCategorie(id) {
+            if (!confirm("Supprimer cette catégorie ? Les produits liés ne seront pas supprimés, juste détachés.")) return;
+            try { await api(`/categories/${id}`, { method: "DELETE", headers: authHeaders() }); afficherOngletCategories(); }
+            catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        // ============== FOURNISSEURS ==============
+        async function afficherOngletFournisseurs() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                cacheFournisseurs = await api("/fournisseurs", { headers: authHeaders() });
+                contenu.innerHTML = `
+                    <div class="flex justify-end mb-4"><button onclick="ouvrirModalFournisseur()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg">+ Nouveau fournisseur</button></div>
+                    <div class="bg-white rounded-xl shadow overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr class="text-gray-400 uppercase text-xs border-b"><th class="p-3">Nom</th><th class="p-3">Contact</th><th class="p-3">Téléphone</th><th class="p-3 text-right">Actions</th></tr></thead>
+                            <tbody id="table-fournisseurs" class="divide-y"></tbody>
+                        </table>
+                    </div>`;
+                const body = document.getElementById("table-fournisseurs");
+                body.innerHTML = cacheFournisseurs.length === 0 ? `<tr><td colspan="4" class="p-6 text-center text-gray-400 italic">Aucun fournisseur.</td></tr>` :
+                    cacheFournisseurs.map(f => `
+                        <tr>
+                            <td class="p-3 font-bold">${f.nom}</td>
+                            <td class="p-3 text-gray-500">${f.contact || '-'}</td>
+                            <td class="p-3 text-gray-500">${f.telephone || '-'}</td>
+                            <td class="p-3 text-right whitespace-nowrap">
+                                <button onclick="ouvrirModalFournisseur(${f.id})" class="text-blue-600 hover:underline text-xs font-bold mr-3">Modifier</button>
+                                <button onclick="supprimerFournisseur(${f.id})" class="text-red-500 hover:underline text-xs font-bold">Supprimer</button>
+                            </td>
+                        </tr>`).join("");
+            } catch (e) { if (e.message !== "401" && e.message !== "403") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        function ouvrirModalFournisseur(id) {
+            document.getElementById("modal-fournisseur-titre").innerText = id ? "Modifier le fournisseur" : "Nouveau fournisseur";
+            document.getElementById("f-id").value = id || "";
+            ["nom", "contact", "telephone", "email", "adresse", "notes"].forEach(champ => {
+                document.getElementById("f-" + champ).value = id ? (cacheFournisseurs.find(x => x.id === id)[champ] || "") : "";
+            });
+            document.getElementById("modal-fournisseur").classList.remove("hidden");
+        }
+        function fermerModalFournisseur() { document.getElementById("modal-fournisseur").classList.add("hidden"); }
+
+        async function enregistrerFournisseur(event) {
+            event.preventDefault();
+            const id = document.getElementById("f-id").value;
+            const payload = {};
+            ["nom", "contact", "telephone", "email", "adresse", "notes"].forEach(champ => { payload[champ] = document.getElementById("f-" + champ).value; });
+            try {
+                if (id) await api(`/fournisseurs/${id}`, { method: "PUT", headers: authHeaders(true), body: JSON.stringify(payload) });
+                else await api("/fournisseurs", { method: "POST", headers: authHeaders(true), body: JSON.stringify(payload) });
+                fermerModalFournisseur();
+                afficherOngletFournisseurs();
+            } catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        async function supprimerFournisseur(id) {
+            if (!confirm("Supprimer ce fournisseur ? Les produits liés ne seront pas supprimés, juste détachés.")) return;
+            try { await api(`/fournisseurs/${id}`, { method: "DELETE", headers: authHeaders() }); afficherOngletFournisseurs(); }
+            catch (e) { if (e.message !== "401" && e.message !== "403") alert("Erreur : " + e.message); }
+        }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+    </script>
+</body>
+</html>

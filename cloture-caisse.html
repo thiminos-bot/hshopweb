@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Clôture de caisse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">🔒 HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── CLÔTURE DE CAISSE</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <button onclick="afficherHistorique()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🕓 Historique</button>
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <main id="contenu" class="p-4 sm:p-6 max-w-3xl mx-auto">
+        <p class="text-gray-400 italic text-center py-10">Chargement...</p>
+    </main>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+        let role = localStorage.getItem("hshop_role");
+        let perimetreActif = "perso";
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            role = localStorage.getItem("hshop_role");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            afficherCourant();
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+        function gererNonAutorise() { localStorage.clear(); window.location.href = "login.html"; }
+        function fmtF(n) { return Math.round(n || 0).toLocaleString() + " F"; }
+        function authHeaders(json) { return json ? { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" } : { "Authorization": `Bearer ${token}` }; }
+
+        async function api(path, options = {}) {
+            const response = await fetch(`${API_URL}${path}`, options);
+            if (response.status === 401) { gererNonAutorise(); throw new Error("401"); }
+            if (!response.ok) {
+                let detail = "Erreur serveur.";
+                try { detail = (await response.json()).detail || detail; } catch (e) {}
+                throw new Error(detail);
+            }
+            return response.status === 204 ? null : response.json();
+        }
+
+        // ============== ECRAN COURANT ==============
+        async function afficherCourant() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                const t = await api(`/cloture-caisse/courant?perimetre=${perimetreActif}`, { headers: authHeaders() });
+                const netCaisse = t.total_especes + t.total_mobile - t.total_depenses;
+
+                const toggleHtml = role === "admin" ? `
+                    <div class="flex gap-2 mb-4">
+                        <button onclick="changerPerimetre('perso')" class="flex-1 py-2 rounded-lg font-bold text-sm ${perimetreActif === 'perso' ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 border'}">Ma caisse</button>
+                        <button onclick="changerPerimetre('globale')" class="flex-1 py-2 rounded-lg font-bold text-sm ${perimetreActif === 'globale' ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 border'}">Toutes les caisses</button>
+                    </div>` : "";
+
+                contenu.innerHTML = `
+                    ${toggleHtml}
+                    <div class="bg-white rounded-xl shadow p-6 mb-4">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-1">${perimetreActif === 'perso' ? 'Ma caisse — période en cours' : 'Toutes les caisses — période en cours'}</h2>
+                        <p class="text-xs text-gray-400 mb-4">${t.periode_debut ? 'Depuis le ' + t.periode_debut : 'Aucune vente en attente de clôture'}${t.derniere_cloture ? ' — dernière clôture : ' + t.derniere_cloture.reference : ''}</p>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                            <div class="bg-gray-50 rounded-lg p-3">
+                                <div class="text-xs font-bold text-gray-400 uppercase">Ventes</div>
+                                <div class="text-xl font-black text-gray-900">${t.nb_ventes}</div>
+                            </div>
+                            <div class="bg-gray-50 rounded-lg p-3">
+                                <div class="text-xs font-bold text-gray-400 uppercase">CA brut</div>
+                                <div class="text-xl font-black text-gray-900">${fmtF(t.ca_brut)}</div>
+                            </div>
+                            <div class="bg-gray-50 rounded-lg p-3">
+                                <div class="text-xs font-bold text-gray-400 uppercase">Annulées</div>
+                                <div class="text-xl font-black text-gray-900">${t.nb_ventes_annulees}</div>
+                            </div>
+                        </div>
+
+                        <table class="w-full text-sm mb-4">
+                            <tbody class="divide-y">
+                                <tr><td class="py-2 text-gray-500">Espèces</td><td class="py-2 text-right font-bold">${fmtF(t.total_especes)}</td></tr>
+                                <tr><td class="py-2 text-gray-500">Mobile Money</td><td class="py-2 text-right font-bold">${fmtF(t.total_mobile)}</td></tr>
+                                <tr><td class="py-2 text-gray-500">Crédit (non encaissé)</td><td class="py-2 text-right font-bold text-orange-500">${fmtF(t.total_credit)}</td></tr>
+                                <tr><td class="py-2 text-gray-500">Dépenses</td><td class="py-2 text-right font-bold text-red-500">-${fmtF(t.total_depenses)}</td></tr>
+                            </tbody>
+                        </table>
+
+                        <div class="bg-gray-900 text-white rounded-lg p-4 flex justify-between items-center mb-2">
+                            <span class="font-bold">NET CAISSE</span>
+                            <span class="text-2xl font-black">${fmtF(netCaisse)}</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-400 px-1">
+                            <span>Bénéfice net estimé : ${fmtF(t.benefice_net)}</span>
+                            <span>Valeur stock : ${fmtF(t.stock_valeur)}</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300 mt-1 px-1">Bénéfice/stock basés sur le prix d'achat renseigné par produit — sous-évalués si non renseigné.</p>
+                    </div>
+
+                    <textarea id="notes-cloture" placeholder="Note (optionnel)" class="w-full border rounded-lg p-2 mb-3"></textarea>
+                    <button onclick="confirmerCloture()" ${t.nb_ventes === 0 && t.total_depenses === 0 ? 'disabled' : ''}
+                            class="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg">
+                        🔒 Clôturer la caisse
+                    </button>`;
+            } catch (e) { if (e.message !== "401") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        function changerPerimetre(p) { perimetreActif = p; afficherCourant(); }
+
+        async function confirmerCloture() {
+            const libelle = perimetreActif === "perso" ? "ta caisse" : "TOUTES les caisses (tous les caissiers)";
+            if (!confirm(`Clôturer ${libelle} maintenant ? Les ventes et dépenses concernées seront figées dans cet arrêté — irréversible.`)) return;
+            const notes = document.getElementById("notes-cloture").value;
+            try {
+                const r = await api("/cloture-caisse", { method: "POST", headers: authHeaders(true), body: JSON.stringify({ notes, perimetre: perimetreActif }) });
+                alert(`✅ Caisse clôturée — ${r.reference}\nLe rapport PDF va se télécharger automatiquement.`);
+                afficherCourant();
+                telechargerPdf(r.id);
+            } catch (e) { if (e.message !== "401") alert("Erreur : " + e.message); }
+        }
+
+        // ============== HISTORIQUE ==============
+        async function afficherHistorique() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                const liste = await api("/cloture-caisse/historique", { headers: authHeaders() });
+                contenu.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-gray-700">Historique des clôtures</h2>
+                        <button onclick="afficherCourant()" class="text-blue-600 hover:underline text-sm font-bold">⬅ Retour</button>
+                    </div>
+                    <div class="space-y-3" id="liste-historique"></div>`;
+                const zone = document.getElementById("liste-historique");
+                zone.innerHTML = liste.length === 0 ? `<p class="text-gray-400 italic text-center py-10">Aucune clôture enregistrée.</p>` :
+                    liste.map(a => {
+                        const net = a.total_especes + a.total_mobile - a.total_depenses;
+                        return `
+                        <div class="bg-white rounded-xl shadow p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <div class="font-bold text-gray-800">${a.reference}
+                                        <span class="text-xs font-normal px-2 py-0.5 rounded ${a.perimetre === 'perso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}">${a.perimetre === 'perso' ? 'Perso' : 'Globale'}</span>
+                                    </div>
+                                    <div class="text-xs text-gray-400">${a.periode_debut} → ${a.periode_fin}</div>
+                                    <div class="text-xs text-gray-400">Par ${a.operateur}</div>
+                                </div>
+                                <button onclick="telechargerPdf(${a.id})" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-2 rounded-lg font-bold whitespace-nowrap">📄 PDF</button>
+                            </div>
+                            <div class="flex flex-wrap gap-4 text-sm mt-2">
+                                <span>${a.nb_ventes} ventes — <b>${fmtF(a.ca_brut)}</b></span>
+                                <span class="font-bold text-gray-900">Net caisse : ${fmtF(net)}</span>
+                            </div>
+                            ${a.notes ? `<p class="text-xs text-gray-400 italic mt-2">${a.notes}</p>` : ''}
+                        </div>`;
+                    }).join("");
+            } catch (e) { if (e.message !== "401") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        async function telechargerPdf(id) {
+            try {
+                const response = await fetch(`${API_URL}/cloture-caisse/${id}/pdf`, { headers: authHeaders() });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error("Erreur lors du téléchargement.");
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `cloture_${id}.pdf`;
+                document.body.appendChild(a); a.click(); a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) { alert("Erreur : " + e.message); }
+        }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+    </script>
+</body>
+</html>

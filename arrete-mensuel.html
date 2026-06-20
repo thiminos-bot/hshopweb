@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Arrêté mensuel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">📅 HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── ARRÊTÉ MENSUEL</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <main class="p-4 sm:p-6 max-w-4xl mx-auto">
+        <div class="bg-white rounded-xl shadow p-4 mb-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Mois</label>
+                    <select id="f-mois" onchange="chargerArrete()" class="w-full border p-2 rounded bg-white">
+                        <option value="1">Janvier</option><option value="2">Février</option><option value="3">Mars</option>
+                        <option value="4">Avril</option><option value="5">Mai</option><option value="6">Juin</option>
+                        <option value="7">Juillet</option><option value="8">Août</option><option value="9">Septembre</option>
+                        <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Année</label>
+                    <select id="f-annee" onchange="chargerArrete()" class="w-full border p-2 rounded bg-white"></select>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Caissier</label>
+                    <select id="f-vendeur" onchange="chargerArrete()" class="w-full border p-2 rounded bg-white">
+                        <option value="">Tous</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Mode de paiement</label>
+                    <select id="f-mode" onchange="chargerArrete()" class="w-full border p-2 rounded bg-white">
+                        <option value="">Tous</option>
+                        <option value="ESPECES">ESPÈCES</option>
+                        <option value="CREDIT">CRÉDIT</option>
+                        <option value="MOBILE">MOBILE MONEY</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex gap-2 justify-end">
+                <button onclick="exporter('excel')" class="bg-gray-700 hover:bg-gray-600 text-white text-sm px-4 py-2 rounded-lg font-bold transition">📊 Excel</button>
+                <button onclick="exporter('pdf')" class="bg-gray-700 hover:bg-gray-600 text-white text-sm px-4 py-2 rounded-lg font-bold transition">📄 PDF</button>
+            </div>
+        </div>
+
+        <div id="contenu">
+            <p class="text-gray-400 italic text-center py-10">Chargement...</p>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+
+        window.onload = async function() {
+            token = localStorage.getItem("hshop_token");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            await chargerOptions();
+            const maintenant = new Date();
+            document.getElementById("f-mois").value = maintenant.getMonth() + 1;
+            chargerArrete();
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+        function gererNonAutorise() { localStorage.clear(); window.location.href = "login.html"; }
+        function fmtF(n) { return Math.round(n || 0).toLocaleString() + " F"; }
+
+        async function chargerOptions() {
+            try {
+                const response = await fetch(`${API_URL}/arrete-mensuel/options`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (response.status === 403) {
+                    document.getElementById("contenu").innerHTML = `<div class="bg-white rounded-xl shadow p-8 text-center">
+                        <p class="text-red-500 font-bold text-lg mb-2">⛔ Accès réservé aux comptes administrateur</p>
+                        <a href="caisse.html" class="text-blue-600 hover:underline">Retour à la caisse</a>
+                    </div>`;
+                    throw new Error("403");
+                }
+                const opts = await response.json();
+                const maintenant = new Date();
+                const anneeActuelle = maintenant.getFullYear();
+                const annees = new Set(opts.annees.map(a => parseInt(a)));
+                annees.add(anneeActuelle);
+                const selectAnnee = document.getElementById("f-annee");
+                selectAnnee.innerHTML = [...annees].sort((a, b) => b - a).map(a => `<option value="${a}">${a}</option>`).join("");
+
+                const selectVendeur = document.getElementById("f-vendeur");
+                selectVendeur.innerHTML = '<option value="">Tous</option>' + opts.vendeurs.map(v => `<option value="${v}">${v}</option>`).join("");
+            } catch (e) { if (e.message !== "403") throw e; }
+        }
+
+        function construireParams() {
+            const params = new URLSearchParams({
+                annee: document.getElementById("f-annee").value,
+                mois: document.getElementById("f-mois").value,
+            });
+            const vendeur = document.getElementById("f-vendeur").value;
+            const mode = document.getElementById("f-mode").value;
+            if (vendeur) params.set("vendeur", vendeur);
+            if (mode) params.set("mode_paiement", mode);
+            return params;
+        }
+
+        async function exporter(type) {
+            const params = construireParams();
+            const chemin = type === "excel" ? "/arrete-mensuel/export-excel" : "/arrete-mensuel/export-pdf";
+            const extension = type === "excel" ? "xlsx" : "pdf";
+            try {
+                const response = await fetch(`${API_URL}${chemin}?${params}`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) { alert("Erreur lors de l'export."); return; }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `arrete_mensuel_${params.get("annee")}_${params.get("mois")}.${extension}`;
+                document.body.appendChild(a); a.click(); a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) { alert("Erreur réseau."); }
+        }
+
+        async function chargerArrete() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            const params = construireParams();
+
+            try {
+                const response = await fetch(`${API_URL}/arrete-mensuel?${params}`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error();
+                const d = await response.json();
+                afficherArrete(d);
+            } catch (e) { contenu.innerHTML = `<p class="text-red-500 text-center py-10">Erreur de chargement.</p>`; }
+        }
+
+        function afficherArrete(d) {
+            const netCaisse = d.total_especes + d.total_mobile - d.total_depenses;
+            const contenu = document.getElementById("contenu");
+
+            if (d.nb_ventes === 0 && d.total_depenses === 0) {
+                contenu.innerHTML = `<div class="bg-white rounded-xl shadow p-8 text-center text-gray-400 italic">Aucune donnée pour cette sélection.</div>`;
+                return;
+            }
+
+            const maxCa = Math.max(...d.ca_par_jour.map(j => j.ca), 1);
+            const graphHtml = d.ca_par_jour.length === 0 ? '' : `
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6 mb-4">
+                    <h2 class="text-sm font-bold text-gray-500 uppercase mb-3">CA par jour</h2>
+                    <div class="flex items-end gap-1 h-28">
+                        ${d.ca_par_jour.map(j => `<div class="flex-1 bg-blue-500 rounded-t" style="height:${Math.max(4, Math.round(j.ca / maxCa * 100))}%" title="${j.jour} : ${fmtF(j.ca)}"></div>`).join("")}
+                    </div>
+                </div>`;
+
+            const ventilationHtml = d.ventilation_vendeurs.length === 0 ? '' : `
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6 mb-4">
+                    <h2 class="text-sm font-bold text-gray-500 uppercase mb-3">Par caissier</h2>
+                    <table class="w-full text-sm">
+                        <tbody class="divide-y">
+                            ${d.ventilation_vendeurs.map(v => `<tr><td class="py-2 font-bold">${v.vendeur}</td><td class="py-2 text-gray-400">${v.nb_ventes} ventes</td><td class="py-2 text-right font-bold">${fmtF(v.ca)}</td></tr>`).join("")}
+                        </tbody>
+                    </table>
+                </div>`;
+
+            const topProduitsHtml = d.top_produits.length === 0 ? '' : `
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6 mb-4">
+                    <h2 class="text-sm font-bold text-gray-500 uppercase mb-3">Top produits</h2>
+                    ${d.top_produits.map((p, i) => `<div class="flex justify-between text-sm py-1"><span><span class="text-gray-400 font-bold mr-2">#${i+1}</span>${p.nom} <span class="text-gray-400">x${p.quantite}</span></span><span class="font-bold">${fmtF(p.total)}</span></div>`).join("")}
+                </div>`;
+
+            const depensesHtml = d.depenses_par_categorie.length === 0 ? '' : `
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6 mb-4">
+                    <h2 class="text-sm font-bold text-gray-500 uppercase mb-3">Dépenses par catégorie</h2>
+                    ${d.depenses_par_categorie.map(c => `<div class="flex justify-between text-sm py-1"><span>${c.categorie}</span><span class="font-bold text-red-600">${fmtF(c.total)}</span></div>`).join("")}
+                </div>`;
+
+            contenu.innerHTML = `
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                    <div class="bg-white rounded-xl shadow p-4"><div class="text-xs font-bold text-gray-400 uppercase">Ventes</div><div class="text-2xl font-black text-gray-900">${d.nb_ventes}</div></div>
+                    <div class="bg-white rounded-xl shadow p-4"><div class="text-xs font-bold text-gray-400 uppercase">CA brut</div><div class="text-2xl font-black text-gray-900">${fmtF(d.ca_brut)}</div></div>
+                    <div class="bg-white rounded-xl shadow p-4"><div class="text-xs font-bold text-gray-400 uppercase">Annulées</div><div class="text-2xl font-black text-gray-900">${d.nb_ventes_annulees}<span class="text-xs text-gray-400 font-normal"> (${fmtF(d.montant_annule)})</span></div></div>
+                    <div class="bg-white rounded-xl shadow p-4 border-l-4 border-green-500"><div class="text-xs font-bold text-gray-400 uppercase">Net caisse</div><div class="text-2xl font-black text-green-700">${fmtF(netCaisse)}</div></div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6 mb-4">
+                    <table class="w-full text-sm">
+                        <tbody class="divide-y">
+                            <tr><td class="py-2 text-gray-500">Espèces</td><td class="py-2 text-right font-bold">${fmtF(d.total_especes)}</td></tr>
+                            <tr><td class="py-2 text-gray-500">Mobile Money</td><td class="py-2 text-right font-bold">${fmtF(d.total_mobile)}</td></tr>
+                            <tr><td class="py-2 text-gray-500">Crédit (non encaissé)</td><td class="py-2 text-right font-bold text-orange-500">${fmtF(d.total_credit)}</td></tr>
+                            <tr><td class="py-2 text-gray-500">Dépenses</td><td class="py-2 text-right font-bold text-red-500">-${fmtF(d.total_depenses)}</td></tr>
+                            <tr><td class="py-2 font-bold">Bénéfice net estimé</td><td class="py-2 text-right font-bold">${fmtF(d.benefice_net)}</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="text-[11px] text-gray-300 mt-2">Bénéfice basé sur le prix d'achat renseigné par produit — sous-évalué si non renseigné.</p>
+                </div>
+
+                ${graphHtml}
+                ${ventilationHtml}
+                ${topProduitsHtml}
+                ${depensesHtml}
+            `;
+        }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+    </script>
+</body>
+</html>

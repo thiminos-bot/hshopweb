@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Inventaire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">📋 HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── INVENTAIRE</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <button onclick="afficherHistorique()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🕓 Historique</button>
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <main id="contenu" class="p-4 sm:p-6 max-w-4xl mx-auto">
+        <p class="text-gray-400 italic text-center py-10">Chargement...</p>
+    </main>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+        let inventaireCourantId = null;
+        let lignesCache = [];
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            afficherEcranCourant();
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+        function gererNonAutorise() { localStorage.clear(); window.location.href = "login.html"; }
+        function fmtF(n) { return Math.round(n || 0).toLocaleString() + " F"; }
+
+        async function api(path, options = {}) {
+            const response = await fetch(`${API_URL}${path}`, options);
+            if (response.status === 401) { gererNonAutorise(); throw new Error("401"); }
+            if (!response.ok) {
+                let detail = "Erreur serveur.";
+                try { detail = (await response.json()).detail || detail; } catch (e) {}
+                throw new Error(detail);
+            }
+            return response.status === 204 ? null : response.json();
+        }
+        function authHeaders(json) { return json ? { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" } : { "Authorization": `Bearer ${token}` }; }
+
+        async function exporterExcel(id) {
+            try {
+                const response = await fetch(`${API_URL}/inventaire/${id}/export-excel`, { headers: authHeaders() });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error("Erreur lors de l'export.");
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `inventaire_${id}.xlsx`;
+                document.body.appendChild(a); a.click(); a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) { alert("Erreur : " + e.message); }
+        }
+
+        // ============== ECRAN PRINCIPAL ==============
+        async function afficherEcranCourant() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                const data = await api("/inventaire/courant", { headers: authHeaders() });
+                if (!data.actif) { afficherDemarrage(); return; }
+                inventaireCourantId = data.inventaire.id;
+                lignesCache = data.lignes;
+                afficherComptage(data.inventaire);
+            } catch (e) { if (e.message !== "401") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        function afficherDemarrage() {
+            document.getElementById("contenu").innerHTML = `
+                <div class="bg-white rounded-xl shadow p-8 text-center">
+                    <p class="text-gray-500 mb-4">Aucun inventaire en cours.</p>
+                    <p class="text-xs text-gray-400 mb-6">Démarrer un inventaire fige le stock théorique de tous les produits actifs au moment T — tu pourras ensuite saisir les comptages réels, produit par produit.</p>
+                    <input id="note-demarrage" placeholder="Note (optionnel, ex: Inventaire mensuel juin)" class="border rounded-lg p-2 w-full max-w-md mb-4">
+                    <br>
+                    <button onclick="demarrerInventaire()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-lg">▶️ Démarrer un nouvel inventaire</button>
+                </div>`;
+        }
+
+        async function demarrerInventaire() {
+            const note = document.getElementById("note-demarrage").value;
+            try {
+                await api("/inventaire/demarrer", { method: "POST", headers: authHeaders(true), body: JSON.stringify({ note }) });
+                afficherEcranCourant();
+            } catch (e) { if (e.message !== "401") alert("Erreur : " + e.message); }
+        }
+
+        // ============== ECRAN DE COMPTAGE ==============
+        function afficherComptage(inv) {
+            const total = lignesCache.length;
+            const comptes = lignesCache.filter(l => l.stock_reel !== null).length;
+            const ecarts = lignesCache.filter(l => l.stock_reel !== null && l.ecart !== 0);
+            const valeurTotale = ecarts.reduce((s, l) => s + l.valeur_ecart, 0);
+
+            document.getElementById("contenu").innerHTML = `
+                <div class="bg-white rounded-xl shadow p-4 mb-4">
+                    <div class="flex flex-wrap justify-between items-center gap-3 mb-2">
+                        <div>
+                            <span class="font-bold text-gray-700">Inventaire #${inv.id}</span>
+                            ${inv.note ? `<span class="text-gray-400 text-sm"> — ${inv.note}</span>` : ''}
+                            <div class="text-xs text-gray-400">Démarré le ${inv.date_inventaire}</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="exporterExcel(${inv.id})" class="bg-gray-700 hover:bg-gray-600 text-white font-bold px-4 py-2 rounded-lg text-sm">📥 Excel</button>
+                            <button onclick="confirmerCloture()" class="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-lg text-sm">✅ Clôturer l'inventaire</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-4 text-sm">
+                        <span class="font-bold">${comptes} / ${total} comptés</span>
+                        <span class="${ecarts.length > 0 ? 'text-orange-500 font-bold' : 'text-gray-400'}">${ecarts.length} écart(s)</span>
+                        <span class="${valeurTotale < 0 ? 'text-red-600' : valeurTotale > 0 ? 'text-green-600' : 'text-gray-400'} font-bold">${valeurTotale !== 0 ? (valeurTotale > 0 ? '+' : '') + fmtF(valeurTotale) : ''}</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center mb-3">
+                    <input id="recherche-ligne" oninput="rendreTableComptage()" placeholder="🔍 Rechercher un produit..." class="border rounded-lg p-2 flex-1">
+                    <label class="flex items-center gap-2 text-sm font-bold text-gray-600 whitespace-nowrap">
+                        <input type="checkbox" id="filtre-non-comptes" onchange="rendreTableComptage()"> Non comptés seulement
+                    </label>
+                </div>
+
+                <div class="bg-white rounded-xl shadow overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead><tr class="text-gray-400 uppercase text-xs border-b">
+                            <th class="p-3">Produit</th><th class="p-3 text-right">Théorique</th>
+                            <th class="p-3 text-right">Compté</th><th class="p-3 text-right">Écart</th><th class="p-3 text-right">Action</th>
+                        </tr></thead>
+                        <tbody id="table-comptage" class="divide-y"></tbody>
+                    </table>
+                </div>`;
+            rendreTableComptage();
+        }
+
+        function rendreTableComptage() {
+            const q = (document.getElementById("recherche-ligne")?.value || "").toLowerCase();
+            const nonComptesSeulement = document.getElementById("filtre-non-comptes")?.checked;
+            let liste = lignesCache.filter(l => l.produit_nom.toLowerCase().includes(q));
+            if (nonComptesSeulement) liste = liste.filter(l => l.stock_reel === null);
+
+            const body = document.getElementById("table-comptage");
+            if (liste.length === 0) { body.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-gray-400 italic">Aucun produit.</td></tr>`; return; }
+            body.innerHTML = liste.map(l => `
+                <tr>
+                    <td class="p-3 font-bold">${l.produit_nom} <span class="text-gray-400 font-normal text-xs">${l.unite}</span></td>
+                    <td class="p-3 text-right text-gray-500">${l.stock_theorique}</td>
+                    <td class="p-3 text-right">
+                        <input type="number" step="any" value="${l.stock_reel !== null ? l.stock_reel : ''}"
+                               onchange="saisirComptage(${l.id}, this.value)"
+                               placeholder="—" class="w-24 border rounded p-1 text-right">
+                    </td>
+                    <td class="p-3 text-right font-bold ${l.ecart > 0 ? 'text-green-600' : l.ecart < 0 ? 'text-red-600' : 'text-gray-300'}">${l.stock_reel !== null ? (l.ecart > 0 ? '+' : '') + l.ecart : '-'}</td>
+                    <td class="p-3 text-right">${l.stock_reel !== null ? `<button onclick="effacerComptage(${l.id})" class="text-xs text-gray-400 hover:text-red-500 hover:underline">Effacer</button>` : ''}</td>
+                </tr>`).join("");
+        }
+
+        async function saisirComptage(ligneId, valeur) {
+            const stockReel = valeur === "" ? null : parseFloat(valeur);
+            try {
+                await api(`/inventaire/lignes/${ligneId}`, { method: "PUT", headers: authHeaders(true), body: JSON.stringify({ stock_reel: stockReel, notes: "" }) });
+                await afficherEcranCourant(); // recharge tout pour resynchroniser comptes/écarts
+            } catch (e) { if (e.message !== "401") alert("Erreur : " + e.message); }
+        }
+
+        function effacerComptage(ligneId) { saisirComptage(ligneId, ""); }
+
+        async function confirmerCloture() {
+            const total = lignesCache.length;
+            const comptes = lignesCache.filter(l => l.stock_reel !== null).length;
+            const ecarts = lignesCache.filter(l => l.stock_reel !== null && l.ecart !== 0).length;
+            const msg = comptes < total
+                ? `⚠️ Seulement ${comptes}/${total} produits comptés — les ${total - comptes} non comptés garderont leur stock actuel inchangé.\n\n${ecarts} ajustement(s) seront appliqués. Clôturer quand même ?`
+                : `${ecarts} ajustement(s) de stock vont être appliqués définitivement. Confirmer la clôture ?`;
+            if (!confirm(msg)) return;
+            try {
+                const r = await api(`/inventaire/${inventaireCourantId}/cloturer`, { method: "POST", headers: authHeaders(true) });
+                alert(`✅ Inventaire clôturé — ${r.nb_ajustements} ajustement(s) de stock appliqué(s).`);
+                afficherEcranCourant();
+            } catch (e) {
+                if (e.message !== "401") alert("Erreur : " + e.message + (e.message.includes("administrateur") ? "" : ""));
+            }
+        }
+
+        // ============== HISTORIQUE ==============
+        async function afficherHistorique() {
+            const contenu = document.getElementById("contenu");
+            contenu.innerHTML = `<p class="text-gray-400 italic text-center py-10">Chargement...</p>`;
+            try {
+                const liste = await api("/inventaire/historique", { headers: authHeaders() });
+                contenu.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-gray-700">Historique des inventaires</h2>
+                        <button onclick="afficherEcranCourant()" class="text-blue-600 hover:underline text-sm font-bold">⬅ Retour</button>
+                    </div>
+                    <div class="bg-white rounded-xl shadow overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr class="text-gray-400 uppercase text-xs border-b">
+                                <th class="p-3">#</th><th class="p-3">Note</th><th class="p-3">Clôturé le</th>
+                                <th class="p-3 text-right">Écarts</th><th class="p-3 text-right">Valeur</th><th class="p-3"></th>
+                            </tr></thead>
+                            <tbody id="table-historique" class="divide-y"></tbody>
+                        </table>
+                    </div>`;
+                const body = document.getElementById("table-historique");
+                body.innerHTML = liste.length === 0 ? `<tr><td colspan="6" class="p-6 text-center text-gray-400 italic">Aucun inventaire clôturé.</td></tr>` :
+                    liste.map(i => `
+                        <tr>
+                            <td class="p-3 font-bold text-blue-600">#${i.id}</td>
+                            <td class="p-3 text-gray-500">${i.note || '-'}</td>
+                            <td class="p-3 text-gray-500">${i.date_cloture}</td>
+                            <td class="p-3 text-right">${i.nb_ecarts}</td>
+                            <td class="p-3 text-right font-bold ${i.valeur_totale_ecart < 0 ? 'text-red-600' : i.valeur_totale_ecart > 0 ? 'text-green-600' : 'text-gray-400'}">${fmtF(i.valeur_totale_ecart)}</td>
+                            <td class="p-3 text-right"><button onclick="voirDetailInventaire(${i.id})" class="text-blue-600 hover:underline text-xs font-bold">Détail</button></td>
+                        </tr>`).join("");
+            } catch (e) { if (e.message !== "401") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`; }
+        }
+
+        async function voirDetailInventaire(id) {
+            try {
+                const data = await api(`/inventaire/${id}`, { headers: authHeaders() });
+                const ecarts = data.lignes.filter(l => l.stock_reel !== null && l.ecart !== 0);
+                const contenu = document.getElementById("contenu");
+                contenu.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-gray-700">Inventaire #${id} — détail des écarts</h2>
+                        <div class="flex gap-2">
+                            <button onclick="exporterExcel(${id})" class="bg-gray-700 hover:bg-gray-600 text-white font-bold px-3 py-2 rounded-lg text-xs">📥 Excel</button>
+                            <button onclick="afficherHistorique()" class="text-blue-600 hover:underline text-sm font-bold">⬅ Retour</button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr class="text-gray-400 uppercase text-xs border-b">
+                                <th class="p-3">Produit</th><th class="p-3 text-right">Théorique</th><th class="p-3 text-right">Compté</th>
+                                <th class="p-3 text-right">Écart</th><th class="p-3 text-right">Valeur</th>
+                            </tr></thead>
+                            <tbody>
+                                ${ecarts.length === 0 ? '<tr><td colspan="5" class="p-6 text-center text-gray-400 italic">Aucun écart sur cet inventaire.</td></tr>' :
+                                  ecarts.map(l => `<tr>
+                                    <td class="p-3 font-bold">${l.produit_nom}</td>
+                                    <td class="p-3 text-right text-gray-500">${l.stock_theorique}</td>
+                                    <td class="p-3 text-right">${l.stock_reel}</td>
+                                    <td class="p-3 text-right font-bold ${l.ecart > 0 ? 'text-green-600' : 'text-red-600'}">${l.ecart > 0 ? '+' : ''}${l.ecart}</td>
+                                    <td class="p-3 text-right">${fmtF(l.valeur_ecart)}</td>
+                                  </tr>`).join("")}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } catch (e) { if (e.message !== "401") alert("Erreur : " + e.message); }
+        }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+    </script>
+</body>
+</html>
