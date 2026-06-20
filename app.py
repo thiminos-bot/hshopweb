@@ -38,3 +38,23 @@ def creer_produit():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+
+    # 3. ROUTE POUR LIRE LES CATÉGORIES (GET)
+@app.route('/api/categories', methods=['GET'])
+def obtenir_categories():
+    liste_cats = database.lire_categories()
+    if liste_cats is not None:
+        return jsonify({"status": "success", "donnees": liste_cats}), 200
+    return jsonify({"status": "error", "message": "Impossible de récupérer les catégories"}), 500
+
+# 4. ROUTE POUR AJOUTER UNE CATÉGORIE (POST)
+@app.route('/api/categories', methods=['POST'])
+def creer_categorie():
+    data = request.get_json()
+    if not data or 'nom' not in data:
+        return jsonify({"status": "error", "message": "Le champ 'nom' est obligatoire"}), 400
+    
+    succes = database.ajouter_categorie(data['nom'])
+    if succes:
+        return jsonify({"status": "success", "message": f"Rayon '{data['nom'].upper()}' ajouté avec succès !"}), 201
+    return jsonify({"status": "error", "message": "Échec de l'ajout du rayon en base"}), 500

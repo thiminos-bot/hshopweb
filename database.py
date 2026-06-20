@@ -939,3 +939,32 @@ def ajouter_produit(code, nom, categorie, prix_vente, stock, seuil):
         return False
     finally:
         conn.close()
+
+        def lire_categories():
+    """Récupère toutes les catégories de la base HSHOP."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, nom FROM categories ORDER BY nom")
+        lignes = cursor.fetchall()
+        return [dict(ligne) for ligne in lignes]
+    except sqlite3.Error as e:
+        log.error(f"Erreur SQL Catégories : {e}")
+        return None
+    finally:
+        conn.close()
+
+def ajouter_categorie(nom):
+    """Insère un nouveau rayon en majuscules."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO categories (nom) VALUES (?)", (nom.upper(),))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        log.error(f"Erreur insertion Catégorie : {e}")
+        return False
+    finally:
+        conn.close()
