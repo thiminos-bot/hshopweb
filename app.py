@@ -8,27 +8,33 @@ app = Flask(__name__)
 def home():
     return jsonify({"status": "online", "message": "Bienvenue sur l'API HSHOP V1.0 PLATINIUM"})
 
-# 1. ROUTE POUR LIRE LES PRODUITS (GET)
 @app.route('/api/produits', methods=['GET'])
 def obtenir_produits():
     liste_produits = database.lire_produits()
     if liste_produits is not None:
         return jsonify({"status": "success", "donnees": liste_produits}), 200
-    return jsonify({"status": "error", "message": "Impossible de récupérer les produits"}), 500
+    return jsonify({"status": "error", "message": "Impossible de récupérer les produits depuis hshop_v21.db"}), 500
 
-# 2. ROUTE POUR AJOUTER UN PRODUIT (POST)
 @app.route('/api/produits', methods=['POST'])
 def creer_produit():
     data = request.get_json()
     
-    # Vérification des données reçues
-    if not data or 'nom' not in data or 'prix' not in data or 'quantite' not in data:
-        return jsonify({"status": "error", "message": "Données incomplètes"}), 400
+    # Validation selon vos champs réels
+    champs_obligatoires = ['code', 'nom', 'prix_vente', 'stock']
+    if not data or not all(k in data for k in champs_obligatoires):
+        return jsonify({"status": "error", "message": "Données incomplètes (code, nom, prix_vente, stock requis)"}), 400
     
-    succes = database.ajouter_produit(data['nom'], data['prix'], data['quantite'])
+    # Extraction avec valeurs par défaut optionnelles
+    categorie = data.get('categorie', 'GÉNÉRAL')
+    seuil = data.get('seuil_alerte', 5)
+    
+    succes = database.ajouter_produit(
+        data['code'], data['nom'], categorie, data['prix_vente'], data['stock'], seuil
+    )
+    
     if succes:
-        return jsonify({"status": "success", "message": "Produit ajouté avec succès !"}), 201
-    return jsonify({"status": "error", "message": "Échec de l'ajout en base"}), 500
+        return jsonify({"status": "success", "message": f"Produit '{data['nom']}' synchronisé !"}), 201
+    return jsonify({"status": "error", "message": "Échec de l'insertion en base de données"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
