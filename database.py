@@ -849,3 +849,45 @@ def get_impaye_total(client_id: int) -> float:
     total = cur.fetchone()[0] or 0.0
     conn.close()
     return total
+
+def lire_produits():
+    """Récupère tous les produits de la base de données."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        # Ajustez les noms des colonnes selon votre vraie table
+        cursor.execute("SELECT id, nom, prix, quantite FROM produits")
+        lignes = cursor.fetchall()
+        
+        # On transforme le résultat en liste de dictionnaires
+        produits = []
+        for ligne in lignes:
+            produits.append({
+                "id": ligne[0],
+                "nom": ligne[1],
+                "prix": ligne[2],
+                "quantite": ligne[3]
+            })
+        return produits
+    except sqlite3.Error as e:
+        log.error(f"Erreur SQL : {e}")
+        return None
+    finally:
+        conn.close()
+
+def ajouter_produit(nom, prix, quantite):
+    """Insère un nouveau produit dans la base."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO produits (nom, prix, quantite) VALUES (?, ?, ?)",
+            (nom, prix, quantite)
+        )
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        log.error(f"Erreur d'insertion : {e}")
+        return False
+    finally:
+        conn.close()
