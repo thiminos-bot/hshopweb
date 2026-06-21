@@ -1,65 +1,85 @@
+# database.py — HSHOP V1.0 PLATINIUM
+# BIOS Creations — 2026
+
+import sqlite3
 import os
-from flask import Flask, jsonify, request
-import database  # Fait le lien avec votre fichier database.py
+import logging
 
-app = Flask(__name__)
+log = logging.getLogger("hshop")
+DB_NAME = "hshop_v21.db"
 
-# 1. PAGE D'ACCUEIL (La racine qui affiche Bienvenue)
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({
-        "status": "online",
-        "message": "Bienvenue sur l'API HSHOP V1.0 PLATINIUM",
-        "version": "1.0"
-    })
+def get_db_path() -> str:
+    """Retourne le chemin de la base de données."""
+    return os.path.abspath(DB_NAME)
 
-# 2. LISTER LES PRODUITS (GET)
-@app.route('/api/produits', methods=['GET'])
-def obtenir_produits():
-    liste_produits = database.lire_produits()
-    if liste_produits is not None:
-        return jsonify({"status": "success", "donnees": liste_produits}), 200
-    return jsonify({"status": "error", "message": "Impossible de récupérer les produits"}), 500
+def lire_produits():
+    """Récupère tous les produits actifs de la base HSHOP PLATINIUM."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT COALESCE(code_barre, code, '') AS code,
+                   nom,
+                   categorie,
+                   prix_vente,
+                   COALESCE(stock, stock_actuel, 0) AS stock_reel,
+                   COALESCE(seuil_alerte, stock_min, 0) AS seuil
+            FROM produits
+            WHERE actif = 1
+            ORDER BY nom
+        """)
+        lignes = cursor.fetchall()
+        return [dict(ligne) for ligne in lignes]
+    except sqlite3.Error as e:
+        log.error(f"Erreur SQL HSHOP Produits : {e}")
+        return []  # Retourne une liste vide au lieu de faire crasher le serveur
+    finally:
+        conn.close()
 
-# 3. AJOUTER UN PRODUIT (POST)
-@app.route('/api/produits', methods=['POST'])
-def creer_produit():
-    data = request.get_json()
-    champs_obligatoires = ['code', 'nom', 'prix_vente', 'stock']
-    
-    if not data or not all(k in data for k in champs_obligatoires):
-        return jsonify({"status": "error", "message": "Données incomplètes (code, nom, prix_vente, stock requis)"}), 400
-    
-    categorie = data.get('categorie', 'GÉNÉRAL')
-    seuil = data.get('seuil_alerte', 5)
-    
-    succes = database.ajouter_produit(
-        data['code'], data['nom'], categorie, data['prix_vente'], data['stock'], seuil
-    )
-    
-    if succes:
-        return jsonify({"status": "success", "message": f"Produit '{data['nom']}' synchronisé !"}), 201
-    return jsonify({"status": "error", "message": "Échec de l'insertion en base"}), 500
+def ajouter_produit(code, nom, categorie, prix_vente, stock, seuil):
+    """Insère un produit selon le schéma officiel HSHOP."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO produits 
+            (code_barre, code, nom, categorie, prix_vente, stock, stock_actuel, seuil_alerte, stock_min, actif)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        """, (code, code, nom, categorie, float(prix_vente), float(stock), float(stock), float(seuil), float(seuil)))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        log.error(f"Erreur d'insertion HSHOP : {e}")
+        return False
+    finally:
+        conn.close()
 
-# 4. LISTER LES CATÉGORIES / RAYONS (GET)
-@app.route('/api/categories', methods=['GET'])
-def obtenir_categories():
-    liste_cats = database.lire_categories()
-    if liste_cats is not None:
-        return jsonify({"status": "success", "donnees": liste_cats}), 200
-    return jsonify({"status": "error", "message": "Impossible de récupérer les catégories"}), 500
+def lire_categories():
+    """Récupère toutes les catégories de la base HSHOP."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, nom FROM categories ORDER BY nom")
+        lignes = cursor.fetchall()
+        return [dict(ligne) for ligne in lignes]
+    except sqlite3.Error as e:
+        log.error(f"Erreur SQL Catégories : {e}")
+        return []  # Retourne une liste vide en cas de problème
+    finally:
+        conn.close()
 
-# 5. AJOUTER UNE CATÉGORIE / RAYON (POST)
-@app.route('/api/categories', methods=['POST'])
-def creer_categorie():
-    data = request.get_json()
-    if not data or 'nom' not in data:
-        return jsonify({"status": "error", "message": "Le champ 'nom' est obligatoire"}), 400
-    
-    succes = database.ajouter_categorie(data['nom'])
-    if succes:
-        return jsonify({"status": "success", "message": f"Rayon '{data['nom'].upper()}' ajouté !"}), 201
-    return jsonify({"status": "error", "message": "Échec de l'ajout du rayon en base"}), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+def ajouter_categorie(nom):
+    """Insère un nouveau rayon en majuscules."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO categories (nom) VALUES (?)", (nom.upper(),))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        log.error(f"Erreur insertion Catégorie : {e}")
+        return False
+    finally:
+        conn.close()

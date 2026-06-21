@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Paramètres</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <header class="bg-gray-900 text-white px-4 sm:px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+        <h1 class="text-lg sm:text-2xl font-bold tracking-wide">⚙️ HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-sm sm:text-lg"></span> ── PARAMÈTRES</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <a href="caisse.html" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">⬅ Caisse</a>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪</button>
+        </div>
+    </header>
+
+    <main id="contenu" class="p-4 sm:p-6 max-w-2xl mx-auto">
+        <p class="text-gray-400 italic text-center py-10">Chargement...</p>
+    </main>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+        let role = localStorage.getItem("hshop_role");
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            role = localStorage.getItem("hshop_role");
+            if (!token) { window.location.href = "login.html"; return; }
+            chargerNomStructureHeader();
+            chargerPage();
+        };
+
+        function deconnexion() { localStorage.clear(); window.location.href = "login.html"; }
+        function gererNonAutorise() { localStorage.clear(); window.location.href = "login.html"; }
+        function authHeaders(json) { return json ? { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" } : { "Authorization": `Bearer ${token}` }; }
+
+        async function api(path, options = {}) {
+            const response = await fetch(`${API_URL}${path}`, options);
+            if (response.status === 401) { gererNonAutorise(); throw new Error("401"); }
+            if (!response.ok) {
+                let detail = "Erreur serveur.";
+                try { detail = (await response.json()).detail || detail; } catch (e) {}
+                throw new Error(detail);
+            }
+            return response.status === 204 ? null : response.json();
+        }
+
+        async function chargerPage() {
+            const contenu = document.getElementById("contenu");
+            try {
+                const [p, h] = await Promise.all([
+                    api("/parametres", { headers: authHeaders() }),
+                    api("/horaires-caisse", { headers: authHeaders() }),
+                ]);
+                afficherPage(p, h);
+            } catch (e) {
+                if (e.message !== "401") contenu.innerHTML = `<p class="text-red-500 text-center py-10">${e.message}</p>`;
+            }
+        }
+
+        function afficherPage(p, h) {
+            const estAdmin = role === "admin";
+            const contenu = document.getElementById("contenu");
+
+            contenu.innerHTML = `
+                ${!estAdmin ? `<div class="bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm rounded-lg p-3 mb-4">
+                    👁️ Lecture seule — seul un compte administrateur peut modifier ces paramètres.
+                </div>` : ""}
+
+                <!-- Identité de l'entreprise -->
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6 mb-4">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">Identité de l'entreprise</h2>
+
+                    <div class="flex items-center gap-4 mb-5">
+                        <img id="logo-apercu" src="${API_URL}/logo.png?t=${Date.now()}" onerror="this.classList.add('hidden')"
+                             class="w-20 h-20 rounded-lg object-contain border bg-gray-50">
+                        ${estAdmin ? `
+                        <div>
+                            <label class="inline-block bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg cursor-pointer transition">
+                                📷 Changer le logo
+                                <input type="file" id="logo-input" accept="image/*" class="hidden" onchange="televerserLogo(this)">
+                            </label>
+                            <p class="text-[11px] text-gray-400 mt-1">PNG/JPG, 3 Mo max — utilisé sur les tickets et rapports.</p>
+                        </div>` : ""}
+                    </div>
+
+                    <form id="form-identite" onsubmit="enregistrerIdentite(event)" class="space-y-3">
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 uppercase">Nom de la structure *</label>
+                            <input id="pa-nom" required value="${p.nom_structure || ''}" ${estAdmin ? '' : 'disabled'}
+                                   class="w-full border rounded-lg p-2 mt-1 disabled:bg-gray-50 disabled:text-gray-400">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 uppercase">Adresse</label>
+                            <input id="pa-adresse" value="${p.adresse_structure || ''}" ${estAdmin ? '' : 'disabled'}
+                                   class="w-full border rounded-lg p-2 mt-1 disabled:bg-gray-50 disabled:text-gray-400">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 uppercase">Téléphone</label>
+                            <input id="pa-tel" value="${p.tel_structure || ''}" ${estAdmin ? '' : 'disabled'}
+                                   class="w-full border rounded-lg p-2 mt-1 disabled:bg-gray-50 disabled:text-gray-400">
+                        </div>
+
+                        <div class="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg p-3">
+                            ⚠️ L'IFU et le RCCM sont utilisés pour signer chaque facture FEC (obligatoire DGI).
+                            Une valeur vide ou incorrecte invalide la conformité de tes factures — vérifie-les avec soin.
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 uppercase">IFU</label>
+                                <input id="pa-ifu" value="${p.ifu_structure || ''}" ${estAdmin ? '' : 'disabled'}
+                                       class="w-full border rounded-lg p-2 mt-1 disabled:bg-gray-50 disabled:text-gray-400">
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 uppercase">RCCM</label>
+                                <input id="pa-rccm" value="${p.rccm_structure || ''}" ${estAdmin ? '' : 'disabled'}
+                                       class="w-full border rounded-lg p-2 mt-1 disabled:bg-gray-50 disabled:text-gray-400">
+                            </div>
+                        </div>
+
+                        ${estAdmin ? `<button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg mt-2">Enregistrer</button>` : ""}
+                    </form>
+                </div>
+
+                <!-- Horaires de caisse / fermeture automatique -->
+                <div class="bg-white rounded-xl shadow p-4 sm:p-6 mb-4">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-1">Horaires de caisse</h2>
+                    <p class="text-xs text-gray-400 mb-4">Fermeture automatique des sessions vendeur/magasinier à l'heure définie — la session est clôturée et un rapport PDF généré avant déconnexion. Les comptes admin ne sont jamais déconnectés automatiquement.</p>
+
+                    <form id="form-horaires" onsubmit="enregistrerHoraires(event)" class="space-y-3">
+                        <label class="flex items-center gap-2 text-sm font-bold text-gray-600">
+                            <input type="checkbox" id="ho-actif" ${h.actif ? "checked" : ""} ${estAdmin ? '' : 'disabled'}>
+                            Activer la fermeture automatique
+                        </label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 uppercase">Heure d'ouverture</label>
+                                <input id="ho-ouverture" type="time" value="${h.heure_ouverture || '08:00'}" ${estAdmin ? '' : 'disabled'}
+                                       class="w-full border rounded-lg p-2 mt-1 disabled:bg-gray-50 disabled:text-gray-400">
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 uppercase">Heure de fermeture</label>
+                                <input id="ho-fermeture" type="time" value="${h.heure_fermeture || '18:00'}" ${estAdmin ? '' : 'disabled'}
+                                       class="w-full border rounded-lg p-2 mt-1 disabled:bg-gray-50 disabled:text-gray-400">
+                            </div>
+                        </div>
+                        ${estAdmin ? `<button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg mt-2">Enregistrer</button>` : ""}
+                    </form>
+                </div>
+            `;
+        }
+
+        async function enregistrerIdentite(event) {
+            event.preventDefault();
+            const payload = {
+                nom_structure: document.getElementById("pa-nom").value.trim(),
+                adresse_structure: document.getElementById("pa-adresse").value.trim(),
+                tel_structure: document.getElementById("pa-tel").value.trim(),
+                ifu_structure: document.getElementById("pa-ifu").value.trim(),
+                rccm_structure: document.getElementById("pa-rccm").value.trim(),
+            };
+            try {
+                await api("/parametres", { method: "PUT", headers: authHeaders(true), body: JSON.stringify(payload) });
+                chargerNomStructureHeader();
+                alert("✅ Identité enregistrée.");
+            } catch (e) { if (e.message !== "401") alert("Erreur : " + e.message); }
+        }
+
+        async function televerserLogo(input) {
+            const fichier = input.files[0];
+            if (!fichier) return;
+            const formData = new FormData();
+            formData.append("file", fichier);
+            try {
+                const response = await fetch(`${API_URL}/parametres/logo`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${token}` },
+                    body: formData,
+                });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) {
+                    let detail = "Erreur lors du téléversement.";
+                    try { detail = (await response.json()).detail || detail; } catch (e) {}
+                    throw new Error(detail);
+                }
+                document.getElementById("logo-apercu").src = `${API_URL}/logo.png?t=${Date.now()}`;
+                document.getElementById("logo-apercu").classList.remove("hidden");
+            } catch (e) { alert("Erreur : " + e.message); }
+        }
+
+        async function enregistrerHoraires(event) {
+            event.preventDefault();
+            const payload = {
+                actif: document.getElementById("ho-actif").checked,
+                heure_ouverture: document.getElementById("ho-ouverture").value || "08:00",
+                heure_fermeture: document.getElementById("ho-fermeture").value || "18:00",
+            };
+            try {
+                await api("/horaires-caisse", { method: "PUT", headers: authHeaders(true), body: JSON.stringify(payload) });
+                alert("✅ Horaires enregistrés.");
+            } catch (e) { if (e.message !== "401") alert("Erreur : " + e.message); }
+        }
+
+        async function chargerNomStructureHeader() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return;
+                const p = await response.json();
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+            } catch (e) { /* pas bloquant */ }
+        }
+    </script>
+</body>
+</html>

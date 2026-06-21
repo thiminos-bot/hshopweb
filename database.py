@@ -329,7 +329,18 @@ def init_db():
             reference       TEXT    DEFAULT '',
             note            TEXT    DEFAULT '',
             utilisateur_id  INTEGER REFERENCES utilisateurs(id) ON DELETE SET NULL,
-            date_mouvement  TEXT    DEFAULT (datetime('now'))
+            date_mouvement  TEXT    DEFAULT (datetime('now')),
+            produit_code    TEXT    DEFAULT '',
+            produit_nom     TEXT    DEFAULT '',
+            prix_unitaire   REAL    DEFAULT 0.0,
+            montant_total   REAL    DEFAULT 0.0,
+            fournisseur_id  INTEGER DEFAULT NULL,
+            fournisseur_nom TEXT    DEFAULT '',
+            vente_id        INTEGER DEFAULT NULL,
+            reference_doc   TEXT    DEFAULT '',
+            operateur       TEXT    DEFAULT '',
+            motif           TEXT    DEFAULT '',
+            cloture         INTEGER DEFAULT 0
         )
     """)
 
@@ -390,7 +401,13 @@ def init_db():
             categorie       TEXT    DEFAULT '',
             utilisateur_id  INTEGER REFERENCES utilisateurs(id) ON DELETE SET NULL,
             note            TEXT    DEFAULT '',
-            date_depense    TEXT    DEFAULT (datetime('now'))
+            date_depense    TEXT    DEFAULT (datetime('now')),
+            description     TEXT    DEFAULT '',
+            mode_paiement   TEXT    DEFAULT 'ESPECES',
+            beneficiaire    TEXT    DEFAULT '',
+            operateur       TEXT    DEFAULT '',
+            notes           TEXT    DEFAULT '',
+            cloture         INTEGER DEFAULT 0
         )
     """)
 
@@ -541,12 +558,26 @@ def _migrations(cur, conn):
         # mouvements_stock
         "ALTER TABLE mouvements_stock ADD COLUMN vente_id  INTEGER DEFAULT NULL",
         "ALTER TABLE mouvements_stock ADD COLUMN cloture   INTEGER DEFAULT 0",
+        "ALTER TABLE mouvements_stock ADD COLUMN produit_code    TEXT    DEFAULT ''",
+        "ALTER TABLE mouvements_stock ADD COLUMN produit_nom     TEXT    DEFAULT ''",
+        "ALTER TABLE mouvements_stock ADD COLUMN prix_unitaire   REAL    DEFAULT 0.0",
+        "ALTER TABLE mouvements_stock ADD COLUMN montant_total   REAL    DEFAULT 0.0",
+        "ALTER TABLE mouvements_stock ADD COLUMN fournisseur_id  INTEGER DEFAULT NULL",
+        "ALTER TABLE mouvements_stock ADD COLUMN fournisseur_nom TEXT    DEFAULT ''",
+        "ALTER TABLE mouvements_stock ADD COLUMN reference_doc   TEXT    DEFAULT ''",
+        "ALTER TABLE mouvements_stock ADD COLUMN operateur       TEXT    DEFAULT ''",
+        "ALTER TABLE mouvements_stock ADD COLUMN motif           TEXT    DEFAULT ''",
         # reglements_credit
         "ALTER TABLE reglements_credit ADD COLUMN vente_id INTEGER DEFAULT NULL",
         "ALTER TABLE reglements_credit ADD COLUMN cloture  INTEGER DEFAULT 0",
         # depenses
         "ALTER TABLE depenses ADD COLUMN cloture     INTEGER DEFAULT 0",
         "ALTER TABLE depenses ADD COLUMN categorie   TEXT DEFAULT ''",
+        "ALTER TABLE depenses ADD COLUMN description   TEXT DEFAULT ''",
+        "ALTER TABLE depenses ADD COLUMN mode_paiement  TEXT DEFAULT 'ESPECES'",
+        "ALTER TABLE depenses ADD COLUMN beneficiaire   TEXT DEFAULT ''",
+        "ALTER TABLE depenses ADD COLUMN operateur      TEXT DEFAULT ''",
+        "ALTER TABLE depenses ADD COLUMN notes          TEXT DEFAULT ''",
         # arretes_compte — colonnes complètes utilisées par tab_arrete.py
         "ALTER TABLE arretes_compte ADD COLUMN total_mobile        REAL    DEFAULT 0.0",
         "ALTER TABLE arretes_compte ADD COLUMN reference           TEXT    DEFAULT ''",
@@ -929,44 +960,4 @@ def get_impaye_total(client_id: int) -> float:
     conn.close()
     return total
 
-def lire_produits():
-    """Récupère tous les produits de la base de données."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    try:
-        # Ajustez les noms des colonnes selon votre vraie table
-        cursor.execute("SELECT id, nom, prix, quantite FROM produits")
-        lignes = cursor.fetchall()
-        
-        # On transforme le résultat en liste de dictionnaires
-        produits = []
-        for ligne in lignes:
-            produits.append({
-                "id": ligne[0],
-                "nom": ligne[1],
-                "prix": ligne[2],
-                "quantite": ligne[3]
-            })
-        return produits
-    except sqlite3.Error as e:
-        log.error(f"Erreur SQL : {e}")
-        return None
-    finally:
-        conn.close()
 
-def ajouter_produit(nom, prix, quantite):
-    """Insère un nouveau produit dans la base."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "INSERT INTO produits (nom, prix, quantite) VALUES (?, ?, ?)",
-            (nom, prix, quantite)
-        )
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        log.error(f"Erreur d'insertion : {e}")
-        return False
-    finally:
-        conn.close()

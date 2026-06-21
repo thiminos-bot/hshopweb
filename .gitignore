@@ -1,2 +1,8 @@
-venv/ 
-__pycache__/ 
+venv/
+__pycache__/
+*.pyc
+hshop_v21.db
+hshop_v21.db-shm
+hshop_v21.db-wal
+hshop_v2.log
+*.log

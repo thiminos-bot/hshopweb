@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSHOP - Terminal de Caisse & Stock</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="fermeture-auto.js"></script>
+    <style>
+        #ticket-impression { display: none; }
+
+        @media print {
+            body * { display: none !important; } 
+            #ticket-impression, #ticket-impression * { display: block !important; } 
+            #ticket-impression {
+                display: block !important;
+                position: absolute;
+                left: 0; top: 0;
+                width: 80mm; 
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 12px;
+                line-height: 1.2;
+                color: #000;
+                padding: 5mm;
+            }
+            .text-right { text-align: right !important; }
+            .border-dashed { border-bottom: 1px dashed #000 !important; margin: 5px 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans h-screen flex flex-col">
+
+    <!-- Barre supérieure -->
+    <header class="bg-blue-600 text-white px-4 sm:px-6 py-3 flex justify-between items-center shadow-md">
+        <div class="flex items-center gap-3">
+            <button onclick="ouvrirTiroir()" class="text-white text-2xl leading-none p-1 hover:bg-blue-700 rounded transition" aria-label="Menu">☰</button>
+            <h1 class="text-xl sm:text-2xl font-bold tracking-wide">HSHOP <span id="titre-structure-header" class="font-normal opacity-80 text-base sm:text-lg"></span> ── COMPTOIR DIGITAL</h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="bg-blue-700 text-xs px-3 py-2 rounded-lg font-bold hidden sm:inline">👤 <span id="nom-vendeur">Session</span></span>
+            <button onclick="deconnexion()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold transition">🚪 Quitter</button>
+        </div>
+    </header>
+
+    <!-- Onglets rapides (utilisés en continu pendant une vente) -->
+    <nav class="bg-blue-700 px-4 sm:px-6 py-2 flex gap-2 overflow-x-auto">
+        <button onclick="changerOnglet('onglet-caisse')" id="btn-caisse" class="bg-blue-900 border-b-4 border-white text-white text-sm px-6 py-3 rounded-lg font-bold transition whitespace-nowrap">🛒 Caisse</button>
+        <button onclick="changerOnglet('onglet-historique')" id="btn-historique" class="bg-blue-600 hover:bg-blue-500 text-white text-sm px-6 py-3 rounded-lg font-bold transition whitespace-nowrap">📊 Historique</button>
+        <button onclick="changerOnglet('onglet-stock')" id="btn-stock" class="bg-blue-600 hover:bg-blue-500 text-white text-sm px-6 py-3 rounded-lg font-bold transition whitespace-nowrap">📦 Stock</button>
+        <button onclick="changerOnglet('onglet-depenses')" id="btn-depenses" class="bg-blue-600 hover:bg-blue-500 text-white text-sm px-6 py-3 rounded-lg font-bold transition whitespace-nowrap">💸 Dépenses</button>
+        <a href="cloture-caisse.html" class="bg-blue-600 hover:bg-blue-500 text-white text-sm px-6 py-3 rounded-lg font-bold transition whitespace-nowrap">🔒 Clôture</a>
+    </nav>
+
+    <!-- Voile + tiroir de navigation -->
+    <div id="voile-tiroir" onclick="fermerTiroir()" class="hidden fixed inset-0 bg-black/30 z-40"></div>
+    <div id="tiroir-nav" class="fixed top-0 left-0 bottom-0 w-80 bg-white shadow-xl z-50 p-5 overflow-y-auto transition-transform -translate-x-full">
+        <div class="flex justify-between items-center mb-6 pb-3 border-b">
+            <span class="font-bold text-gray-700 text-lg">Menu</span>
+            <button onclick="fermerTiroir()" class="text-gray-400 hover:text-gray-700 text-3xl leading-none px-2" aria-label="Fermer">✕</button>
+        </div>
+
+        <p class="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wide">Vente</p>
+        <div class="flex flex-col gap-1 mb-6">
+            <a href="caisse.html" class="flex items-center gap-3 px-3 py-3 rounded-lg bg-blue-50 text-blue-700 font-bold text-base">🛒 Caisse</a>
+            <a href="clients.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">💳 Clients & crédits</a>
+        </div>
+
+        <p class="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wide">Stock</p>
+        <div class="flex flex-col gap-1 mb-6">
+            <a href="inventaire.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">📋 Inventaire</a>
+            <a href="mouvements.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">🔄 Mouvements</a>
+        </div>
+
+        <div id="tiroir-commandes" class="hidden">
+            <p class="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wide">Achats</p>
+            <div class="flex flex-col gap-1 mb-6">
+                <a href="commandes.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">📦 Commandes fournisseurs</a>
+            </div>
+        </div>
+
+        <p class="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wide">Caisse & compta</p>
+        <div class="flex flex-col gap-1 mb-6">
+            <a href="cloture-caisse.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">🔒 Clôture de caisse</a>
+        </div>
+
+        <div id="tiroir-admin" class="hidden">
+            <p class="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wide">Administration</p>
+            <div class="flex flex-col gap-1">
+                <a href="dashboard.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">📈 Dashboard</a>
+                <a href="arrete-mensuel.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">📅 Arrêté mensuel</a>
+                <a href="produits.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">🗂️ Produits</a>
+                <a href="utilisateurs.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">👤 Utilisateurs</a>
+                <a href="parametres.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">⚙️ Paramètres</a>
+                <a href="journal.html" class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-gray-700 text-base">📜 Journal</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ONGLET 1 : CAISSE -->
+    <main id="onglet-caisse" class="flex-1 flex overflow-hidden p-4 gap-4">
+        <!-- Sélection des Produits -->
+        <section class="w-5/12 bg-white rounded-xl shadow p-4 flex flex-col">
+            <div class="w-full flex flex-col h-full overflow-hidden">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2 pb-2 border-b flex justify-between items-center">
+                    <span>Articles disponibles</span>
+                    <button onclick="chargerProduits()" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded transition">🔄 Actualiser</button>
+                </h2>
+                <div class="mb-4">
+                    <input id="recherche-input" type="text" oninput="filtrerProduits()" onkeydown="gererToucheRecherche(event)" placeholder="🔍 Nom, identifiant ou scanner un code-barre..." class="w-full border-2 border-gray-200 p-3 rounded-lg text-lg focus:outline-none focus:border-blue-500 font-medium">
+                </div>
+                <div id="grille-produits" class="grid grid-cols-2 gap-3 overflow-y-auto flex-1 pr-1">
+                    <p class="text-gray-400 italic col-span-2 text-center py-10">Chargement des articles...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Panier -->
+        <section class="w-4/12 bg-white rounded-xl shadow p-4 flex flex-col justify-between border-l-4 border-blue-500">
+            <div>
+                <h2 class="text-xl font-semibold text-gray-700 mb-4 pb-2 border-b flex justify-between">
+                    <span>Panier Actuel</span>
+                    <button onclick="viderPanier()" class="text-sm text-red-500 hover:underline">Vider</button>
+                </h2>
+                <div id="liste-panier" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    <p id="panier-vide" class="text-gray-400 text-center py-8 italic">Le panier est vide</p>
+                </div>
+            </div>
+
+            <div class="border-t pt-4 bg-gray-50 -mx-4 -mb-4 p-4 rounded-b-xl space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600 font-medium">TOTAL NET :</span>
+                    <span id="total-affichage" class="text-3xl font-black text-gray-900">0 F</span>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 block mb-1">MODE DE PAIEMENT</label>
+                    <select id="mode-paiement-select" onchange="gererChangementModePaiement()" class="w-full border p-2 rounded text-sm font-bold bg-white">
+                        <option value="ESPECES">ESPÈCES</option>
+                        <option value="CREDIT">CRÉDIT (compte client)</option>
+                    </select>
+                </div>
+                <div id="bloc-client-credit" class="hidden">
+                    <label class="text-xs font-bold text-gray-500 block mb-1">CLIENT (obligatoire en crédit)</label>
+                    <select id="client-select" class="w-full border p-2 rounded text-sm bg-white"><option value="">-- sélectionner --</option></select>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label id="label-recu" class="text-xs font-bold text-gray-500 block mb-1">MONTANT REÇU</label>
+                        <input id="recu-input" type="number" oninput="calculerMonnaie()" value="0" class="w-full border p-2 rounded text-lg font-bold text-green-700">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 block mb-1">MONNAIE À RENDRE</label>
+                        <div id="monnaie-affichage" class="w-full p-2 rounded bg-gray-200 text-lg font-black text-gray-700">0 F</div>
+                    </div>
+                </div>
+                <button onclick="validerLaVente()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl shadow-lg transition text-lg">
+                    VALIDER ET ENREGISTRER LA VENTE
+                </button>
+            </div>
+        </section>
+
+        <!-- Pavé numérique permanent -->
+        <section class="w-3/12 bg-white rounded-xl shadow p-4 flex flex-col">
+            <h2 class="text-sm font-bold text-gray-500 uppercase mb-2 pb-2 border-b">Quantité</h2>
+            <div id="pave-perm-vide" class="flex-1 flex items-center justify-center text-center text-gray-400 text-sm italic px-2">
+                Touche un article du panier pour modifier sa quantité.
+            </div>
+            <div id="pave-perm-actif" class="hidden flex flex-col flex-1">
+                <div class="text-center mb-2">
+                    <div id="pave-perm-nom" class="font-bold text-gray-800 text-sm truncate"></div>
+                    <div id="pave-perm-affichage" class="text-4xl font-black text-blue-600 mt-1 mb-1">0</div>
+                    <div id="pave-perm-unite" class="text-xs text-gray-400"></div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 mb-2 flex-1 content-start">
+                    <button onclick="paveSaisir('7')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">7</button>
+                    <button onclick="paveSaisir('8')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">8</button>
+                    <button onclick="paveSaisir('9')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">9</button>
+                    <button onclick="paveSaisir('4')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">4</button>
+                    <button onclick="paveSaisir('5')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">5</button>
+                    <button onclick="paveSaisir('6')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">6</button>
+                    <button onclick="paveSaisir('1')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">1</button>
+                    <button onclick="paveSaisir('2')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">2</button>
+                    <button onclick="paveSaisir('3')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">3</button>
+                    <button onclick="paveSaisir('.')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">.</button>
+                    <button onclick="paveSaisir('0')" class="bg-gray-100 hover:bg-gray-200 text-lg font-bold py-3 rounded-lg">0</button>
+                    <button onclick="paveEffacer()" class="bg-orange-100 hover:bg-orange-200 text-orange-600 text-base font-bold py-3 rounded-lg">⌫</button>
+                </div>
+                <button onclick="paveRetirerLigne()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2 rounded-lg text-sm mb-2">🗑️ Retirer du panier</button>
+                <button onclick="paveValider()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg">Valider la quantité</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- ONGLET 2 : HISTORIQUE -->
+    <main id="onglet-historique" class="flex-1 p-4 overflow-hidden hidden">
+        <div class="bg-white rounded-xl shadow p-6 h-full flex flex-col overflow-hidden">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b">
+                <h2 class="text-xl font-semibold text-gray-700">30 dernières transactions</h2>
+                <button onclick="chargerHistorique()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-lg transition">🔄 Rafraîchir</button>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b tracking-wider">
+                            <th class="p-3">ID</th>
+                            <th class="p-3">Date</th>
+                            <th class="p-3">Vendeur</th>
+                            <th class="p-3">Mode</th>
+                            <th class="p-3">Note</th>
+                            <th class="p-3 text-right">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-corps" class="divide-y text-gray-700 font-medium"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- ONGLET 3 : GESTION DU STOCK -->
+    <main id="onglet-stock" class="flex-1 p-4 overflow-hidden hidden">
+        <div class="bg-white rounded-xl shadow p-6 h-full flex flex-col overflow-hidden">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b flex-wrap gap-2">
+                <h2 class="text-xl font-semibold text-gray-700">État et Réapprovisionnement des Stocks</h2>
+                <div class="flex items-center gap-2">
+                    <button onclick="exporterStockCSV()" class="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition">📥 Export CSV</button>
+                    <label class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold transition cursor-pointer">
+                        Importer CSV
+                        <input type="file" id="csv-file-input" accept=".csv" onchange="importerStockCSV(event)" class="hidden">
+                    </label>
+                    <button onclick="chargerStock()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded-lg transition">🔄 Actualiser</button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b tracking-wider">
+                            <th class="p-3">ID</th>
+                            <th class="p-3">Nom du produit</th>
+                            <th class="p-3">Prix de Vente</th>
+                            <th class="p-3 text-center">Stock Actuel</th>
+                            <th class="p-3 text-center">Unité</th>
+                            <th class="p-3 text-right">Action rapide</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-stock-corps" class="divide-y text-gray-700 font-medium"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <main id="onglet-depenses" class="flex-1 p-4 overflow-hidden hidden">
+        <div class="bg-white rounded-xl shadow p-6 h-full flex flex-col overflow-hidden max-w-3xl mx-auto w-full">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b flex-wrap gap-2">
+                <h2 class="text-xl font-semibold text-gray-700">Dépenses</h2>
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-2 text-sm font-bold text-gray-600">
+                        <input type="checkbox" id="toggle-toutes-depenses" onchange="chargerDepenses()"> Voir toutes (y compris clôturées)
+                    </label>
+                    <div id="total-depenses-affiche" class="text-lg font-black text-red-600"></div>
+                </div>
+            </div>
+
+            <form onsubmit="ajouterDepense(event)" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 items-end">
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Montant *</label>
+                    <input id="dep-montant" type="number" step="any" min="0.01" required class="w-full border p-2 rounded">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Catégorie</label>
+                    <input id="dep-categorie" list="dep-categories-suggestions" placeholder="Transport..." class="w-full border p-2 rounded">
+                    <datalist id="dep-categories-suggestions">
+                        <option value="Transport"><option value="Fournitures"><option value="Réparation">
+                        <option value="Eau/Électricité"><option value="Loyer"><option value="Autre">
+                    </datalist>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Mode</label>
+                    <select id="dep-mode" class="w-full border p-2 rounded bg-white">
+                        <option value="ESPECES">ESPÈCES</option>
+                        <option value="MOBILE">MOBILE MONEY</option>
+                    </select>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-lg">+ Ajouter</button>
+                </div>
+                <div class="col-span-2 sm:col-span-4">
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Motif *</label>
+                    <input id="dep-description" required placeholder="ex: taxi livraison fournisseur" class="w-full border p-2 rounded">
+                </div>
+            </form>
+
+            <div class="flex-1 overflow-y-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b tracking-wider">
+                            <th class="p-3">Date</th><th class="p-3">Catégorie</th><th class="p-3">Motif</th>
+                            <th class="p-3">Par</th><th class="p-3">Statut</th><th class="p-3 text-right">Montant</th><th class="p-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-depenses-corps" class="divide-y text-gray-700"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- POP-UP MODALE DETAILS -->
+    <div id="modal-details" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 flex flex-col max-h-[80vh]">
+            <div class="flex justify-between items-center pb-3 border-b">
+                <h3 class="text-xl font-bold text-gray-800">Détails de la Vente <span id="modal-titre-id" class="text-blue-600">#0</span></h3>
+                <button onclick="fermerModal()" class="text-gray-400 hover:text-gray-600 text-2xl font-semibold p-2">&times;</button>
+            </div>
+            <div class="flex-1 overflow-y-auto my-4 pr-1">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                            <th class="p-2">Article</th>
+                            <th class="p-2 text-center">Qté</th>
+                            <th class="p-2 text-right">Prix Unitaire</th>
+                            <th class="p-2 text-right">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modal-table-corps" class="divide-y text-gray-700 text-sm font-medium"></tbody>
+                </table>
+            </div>
+            <div class="border-t pt-3 flex justify-end">
+                <button onclick="fermerModal()" class="bg-gray-800 hover:bg-gray-700 text-white text-sm px-5 py-2 rounded-xl font-bold transition">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CREATION RAPIDE DEPUIS UN CODE-BARRE INCONNU -->
+    <div id="modal-creation-rapide" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-1">Code-barre inconnu</h2>
+            <p class="text-xs text-gray-400 mb-4">Ce code n'existe pas encore — crée le produit pour le vendre tout de suite. Tu pourras compléter prix d'achat, catégorie et fournisseur plus tard dans Gestion Produits.</p>
+            <form onsubmit="creerProduitRapide(event)" class="space-y-3">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Code-barre</label>
+                    <input id="cr-code-barre" readonly class="w-full border rounded-lg p-2 mt-1 bg-gray-50 text-gray-500">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Nom *</label>
+                    <input id="cr-nom" required autofocus class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Prix de vente *</label>
+                        <input id="cr-prix-vente" type="number" step="any" min="0" required class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase">Stock initial</label>
+                        <input id="cr-stock" type="number" step="any" min="0" value="1" class="w-full border rounded-lg p-2 mt-1">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase">Unité</label>
+                    <input id="cr-unite" value="pce" class="w-full border rounded-lg p-2 mt-1">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="fermerCreationRapide()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg">Annuler</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg">Créer et ajouter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="toast-confirmation-vente" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white rounded-xl shadow-2xl px-5 py-4 z-50 flex items-center gap-4">
+        <span id="toast-texte" class="text-sm font-bold"></span>
+        <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-bold whitespace-nowrap">🖨️ Réimprimer</button>
+        <button onclick="document.getElementById('toast-confirmation-vente').classList.add('hidden')" class="text-gray-400 hover:text-white text-lg leading-none px-1">✕</button>
+    </div>
+
+    <div id="ticket-impression">
+        <img id="ticket-logo" src="" style="display:none; width: 60px; height: 60px; object-fit: contain; margin: 0 auto 4px auto;">
+        <div style="text-align: center; font-weight: bold; font-size: 14px;" id="ticket-nom-structure">HSHOP</div>
+        <div style="text-align: center; font-size: 10px;" id="ticket-adresse-structure"></div>
+        <div style="text-align: center; font-size: 10px; margin-bottom: 5px;" id="ticket-tel-structure"></div>
+        <div style="text-align: center;" id="ticket-date">Le 00/00/0000 à 00:00</div>
+        <div style="text-align: center; margin-bottom: 5px;">Vendeur: <span id="ticket-vendeur">...</span></div>
+        <div class="border-dashed"></div>
+        <div style="display: flex; font-weight: bold;">
+            <div style="width: 50%;">Article</div>
+            <div style="width: 20%; text-align: center;">Qté</div>
+            <div style="width: 30%; text-align: right;">Total</div>
+        </div>
+        <div class="border-dashed"></div>
+        <div id="ticket-lignes"></div>
+        <div class="border-dashed"></div>
+        <div style="display: flex; font-weight: bold; font-size: 13px;">
+            <div style="width: 60%;">TOTAL NET :</div>
+            <div style="width: 40%; text-align: right;" id="ticket-total">0 F</div>
+        </div>
+        <div style="display: flex;">
+            <div style="width: 60%;">Montant reçu :</div>
+            <div style="width: 40%; text-align: right;" id="ticket-recu">0 F</div>
+        </div>
+        <div style="display: flex;">
+            <div style="width: 60%;">Monnaie rendue :</div>
+            <div style="width: 40%; text-align: right;" id="ticket-monnaie">0 F</div>
+        </div>
+        <div id="ticket-credit-bloc" style="display: none;"></div>
+        <div class="border-dashed"></div>
+        <div style="text-align: center; margin-top: 10px; font-style: italic;">Merci de votre visite ! À bientôt.</div>
+        <div id="ticket-fec-bloc" style="text-align: center; margin-top: 8px;">
+            <div id="ticket-fec-numero" style="font-size: 11px; font-weight: bold;"></div>
+            <img id="ticket-fec-qr" src="" style="width: 100px; height: 100px; margin: 4px auto; display: none;">
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "";
+        let token = localStorage.getItem("hshop_token");
+        let tousLesProduits = [];
+        let panier = [];
+
+        window.onload = function() {
+            token = localStorage.getItem("hshop_token");
+            const user = localStorage.getItem("hshop_user");
+
+            // Plus de mode "bypass_local" : sans session valide, on renvoie
+            // vers la page de connexion (comme historique.html le fait déjà).
+            if (!token) {
+                window.location.href = "login.html";
+                return;
+            }
+            document.getElementById("nom-vendeur").innerText = user || "Session";
+            if (localStorage.getItem("hshop_role") === "admin") {
+                document.getElementById("tiroir-admin").classList.remove("hidden");
+                document.getElementById("tiroir-commandes").classList.remove("hidden");
+            }
+            chargerProduits();
+            chargerClientsPourVente();
+            chargerIdentiteStructure();
+        };
+
+        function ouvrirTiroir() {
+            document.getElementById("tiroir-nav").classList.remove("-translate-x-full");
+            document.getElementById("voile-tiroir").classList.remove("hidden");
+        }
+        function fermerTiroir() {
+            document.getElementById("tiroir-nav").classList.add("-translate-x-full");
+            document.getElementById("voile-tiroir").classList.add("hidden");
+        }
+
+        async function chargerIdentiteStructure() {
+            try {
+                const response = await fetch(`${API_URL}/parametres`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (!response.ok) return; // pas bloquant : le ticket garde ses valeurs par défaut
+                const p = await response.json();
+                document.getElementById("ticket-nom-structure").innerText = p.nom_structure || "HSHOP";
+                document.getElementById("ticket-adresse-structure").innerText = p.adresse_structure || "";
+                document.getElementById("ticket-tel-structure").innerText = p.tel_structure || "";
+                if (p.nom_structure) document.getElementById("titre-structure-header").innerText = "— " + p.nom_structure;
+                if (p.logo_present) {
+                    const logoEl = document.getElementById("ticket-logo");
+                    logoEl.src = "/logo.png?t=" + Date.now();
+                    logoEl.style.display = "block";
+                }
+            } catch (e) { /* pas bloquant */ }
+        }
+
+        async function chargerClientsPourVente() {
+            try {
+                const response = await fetch(`${API_URL}/clients`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) return;
+                const clients = await response.json();
+                const select = document.getElementById("client-select");
+                select.innerHTML = '<option value="">-- sélectionner --</option>' +
+                    clients.map(c => `<option value="${c.id}" data-solde="${c.solde_credit}" data-plafond="${c.encours_max}">${c.nom}${c.telephone ? ' (' + c.telephone + ')' : ''}</option>`).join("");
+            } catch (e) { /* pas bloquant : si ça échoue, on reste en mode espèces */ }
+        }
+
+        function gererChangementModePaiement() {
+            const credit = document.getElementById("mode-paiement-select").value === "CREDIT";
+            document.getElementById("bloc-client-credit").classList.toggle("hidden", !credit);
+            document.getElementById("label-recu").innerText = credit ? "ACOMPTE VERSÉ (0 = tout à crédit)" : "MONTANT REÇU";
+        }
+
+        // Centralise la redirection : appelée par tous les fetch en cas de 401
+        function gererNonAutorise() {
+            localStorage.clear();
+            window.location.href = "login.html";
+        }
+
+        function changerOnglet(ongletId) {
+            document.getElementById('onglet-caisse').classList.add('hidden');
+            document.getElementById('onglet-historique').classList.add('hidden');
+            document.getElementById('onglet-stock').classList.add('hidden');
+            document.getElementById('onglet-depenses').classList.add('hidden');
+
+            const inactif = "bg-blue-600 hover:bg-blue-500 text-white text-sm px-6 py-3 rounded-lg font-bold transition whitespace-nowrap";
+            const actif = "bg-blue-900 border-b-4 border-white text-white text-sm px-6 py-3 rounded-lg font-bold transition whitespace-nowrap";
+
+            document.getElementById('btn-caisse').className = inactif;
+            document.getElementById('btn-historique').className = inactif;
+            document.getElementById('btn-stock').className = inactif;
+            document.getElementById('btn-depenses').className = inactif;
+
+            document.getElementById(ongletId).classList.remove('hidden');
+            if(ongletId === 'onglet-caisse') {
+                document.getElementById('btn-caisse').className = actif;
+                chargerProduits();
+            } else if(ongletId === 'onglet-historique') {
+                document.getElementById('btn-historique').className = actif;
+                chargerHistorique();
+            } else if(ongletId === 'onglet-stock') {
+                document.getElementById('btn-stock').className = actif;
+                chargerStock();
+            } else if(ongletId === 'onglet-depenses') {
+                document.getElementById('btn-depenses').className = actif;
+                chargerDepenses();
+            }
+        }
+
+        async function chargerProduits() {
+            try {
+                const response = await fetch(`${API_URL}/produits`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error();
+                tousLesProduits = await response.json();
+                afficherListe(tousLesProduits);
+                document.getElementById("recherche-input").focus();
+            } catch (error) {
+                document.getElementById("grille-produits").innerHTML = '<p class="text-red-500 text-center py-10 col-span-2">Erreur de liaison avec l\'API.</p>';
+            }
+        }
+
+        function afficherListe(liste) {
+            const grille = document.getElementById("grille-produits");
+            grille.innerHTML = "";
+            if (liste.length === 0) { grille.innerHTML = '<p class="text-gray-400 text-center py-10 col-span-2">Aucun produit disponible.</p>'; return; }
+            liste.forEach(p => {
+                const enRupture = p.stock <= 0;
+                const btn = document.createElement("button");
+                if (enRupture) {
+                    btn.disabled = true;
+                    btn.className = "p-4 bg-gray-100 border text-left rounded-lg flex flex-col justify-between h-32 shadow-sm opacity-60 cursor-not-allowed";
+                } else {
+                    btn.onclick = () => ajouterAuPanier(p.id, p.nom, p.prix_vente);
+                    btn.className = "p-4 bg-gray-50 border hover:border-blue-500 hover:bg-blue-50 text-left rounded-lg transition flex flex-col justify-between h-32 shadow-sm";
+                }
+                btn.innerHTML = `<div><div class="font-bold text-gray-800 line-clamp-1">${p.nom}</div><div class="text-xs mt-1 ${enRupture ? 'text-red-500 font-bold' : 'text-gray-400'}">${enRupture ? 'RUPTURE' : 'Stock: ' + p.stock + ' ' + p.unite}</div></div><div class="text-lg font-black text-blue-600">${p.prix_vente.toLocaleString()} F</div>`;
+                grille.appendChild(btn);
+            });
+        }
+
+        function filtrerProduits() {
+            const txt = document.getElementById("recherche-input").value.toLowerCase().trim();
+            const filtres = tousLesProduits.filter(p => p.nom.toLowerCase().includes(txt) || p.id.toString() === txt || (p.code_barre && p.code_barre.toLowerCase() === txt));
+            afficherListe(filtres);
+        }
+
+        // Un lecteur USB "tape" le code puis envoie Entrée automatiquement —
+        // on intercepte Entrée sur le champ de recherche pour ajouter direct.
+        function gererToucheRecherche(event) {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            const txt = document.getElementById("recherche-input").value.trim();
+            if (!txt) return;
+
+            const parCode = tousLesProduits.find(p => p.code_barre && p.code_barre === txt);
+            if (parCode) { ajouterAuPanier(parCode.id, parCode.nom, parCode.prix_vente); viderRecherche(); return; }
+
+            const visibles = tousLesProduits.filter(p => p.nom.toLowerCase().includes(txt.toLowerCase()) || p.id.toString() === txt);
+            if (visibles.length === 1) { ajouterAuPanier(visibles[0].id, visibles[0].nom, visibles[0].prix_vente); viderRecherche(); return; }
+
+            // Ressemble à un vrai code-barre scanné (que des chiffres, assez long) mais
+            // ne correspond à aucun produit connu -> proposer de le créer tout de suite.
+            if (/^[0-9]{6,}$/.test(txt)) { ouvrirCreationRapide(txt); return; }
+            // Sinon (recherche par nom sans résultat unique) : on laisse juste la liste filtrée affichée.
+        }
+
+        function viderRecherche() {
+            const champ = document.getElementById("recherche-input");
+            champ.value = "";
+            filtrerProduits();
+            champ.focus(); // prêt pour le prochain scan
+        }
+
+        function ajouterAuPanier(id, nom, prix) {
+            const produit = tousLesProduits.find(p => p.id === id);
+            const ligne = panier.find(l => l.produit_id === id);
+            const qteDejaPanier = ligne ? ligne.quantite : 0;
+            if (produit && (qteDejaPanier + 1) > produit.stock) {
+                alert(`⚠️ Stock insuffisant pour "${nom}" — disponible : ${produit.stock}.`);
+                return;
+            }
+            if (ligne) { ligne.quantite += 1; } else { panier.push({ produit_id: id, nom: nom, quantite: 1, prix_unitaire: prix, remise: 0.0 }); }
+            selectionnerLigne(id); // prêt à ajuster la quantité tout de suite via le pavé permanent — rafraîchit aussi l'affichage
+        }
+
+        function afficherConfirmationVente(numeroFec) {
+            const toast = document.getElementById("toast-confirmation-vente");
+            document.getElementById("toast-texte").innerText = "✅ Vente enregistrée" + (numeroFec ? " — " + numeroFec : "") + ". Ticket envoyé à l'imprimante.";
+            toast.classList.remove("hidden");
+            clearTimeout(window._toastTimeout);
+            window._toastTimeout = setTimeout(() => toast.classList.add("hidden"), 10000);
+        }
+
+        function viderPanier() { panier = []; document.getElementById("recu-input").value = 0; mettreAJourAffichage(); deselectionnerLigne(); }
+        function calculerTotal() { return panier.reduce((sum, item) => sum + (item.quantite * item.prix_unitaire), 0); }
+        function calculerMonnaie() { const total = calculerTotal(); const recu = parseFloat(document.getElementById("recu-input").value) || 0; document.getElementById("monnaie-affichage").innerText = Math.max(0, recu - total).toLocaleString() + " F"; }
+
+        function mettreAJourAffichage() {
+            const conteneur = document.getElementById("liste-panier"); conteneur.innerHTML = "";
+            if (panier.length === 0) { conteneur.innerHTML = '<p class="text-gray-400 text-center py-8 italic">Le panier est vide</p>'; document.getElementById("total-affichage").innerText = "0 F"; return; }
+            panier.forEach(item => {
+                const estSelectionnee = item.produit_id === paveProduitId;
+                const div = document.createElement("div");
+                div.onclick = () => selectionnerLigne(item.produit_id);
+                div.className = "flex justify-between items-center p-2 rounded border cursor-pointer transition " +
+                    (estSelectionnee ? "bg-blue-50 border-blue-400" : "bg-gray-50 border-gray-200 hover:border-blue-300");
+                div.innerHTML = `
+                    <div class="flex-1 min-w-0">
+                        <span class="font-bold text-gray-800">${item.nom}</span>
+                        <div class="text-xs text-gray-500">${item.prix_unitaire.toLocaleString()} F x <span class="font-bold ${estSelectionnee ? 'text-blue-600' : 'text-gray-700'}">${item.quantite}</span></div>
+                    </div>
+                    <span class="font-bold text-gray-900 whitespace-nowrap ml-2">${(item.prix_unitaire * item.quantite).toLocaleString()} F</span>`;
+                conteneur.appendChild(div);
+            });
+            document.getElementById("total-affichage").innerText = calculerTotal().toLocaleString() + " F";
+            calculerMonnaie();
+        }
+
+        // ============== PAVE NUMERIQUE PERMANENT (quantité) ==============
+        let paveProduitId = null, paveValeur = "", paveSaisirAmorce = false;
+
+        function selectionnerLigne(produitId) {
+            const ligne = panier.find(l => l.produit_id === produitId);
+            if (!ligne) return;
+            const produit = tousLesProduits.find(p => p.id === produitId);
+            paveProduitId = produitId;
+            paveValeur = String(ligne.quantite);
+            paveSaisirAmorce = false;
+            document.getElementById("pave-perm-nom").innerText = ligne.nom;
+            document.getElementById("pave-perm-unite").innerText = produit ? `Unité : ${produit.unite}` : "";
+            document.getElementById("pave-perm-affichage").innerText = paveValeur;
+            document.getElementById("pave-perm-vide").classList.add("hidden");
+            document.getElementById("pave-perm-actif").classList.remove("hidden");
+            mettreAJourAffichage(); // pour surligner la ligne tout juste sélectionnée
+        }
+
+        function deselectionnerLigne() {
+            paveProduitId = null; paveValeur = ""; paveSaisirAmorce = false;
+            document.getElementById("pave-perm-actif").classList.add("hidden");
+            document.getElementById("pave-perm-vide").classList.remove("hidden");
+        }
+
+        // ============== CREATION RAPIDE (code-barre inconnu) ==============
+        function ouvrirCreationRapide(codeBarre) {
+            document.getElementById("cr-code-barre").value = codeBarre;
+            document.getElementById("cr-nom").value = "";
+            document.getElementById("cr-prix-vente").value = "";
+            document.getElementById("cr-stock").value = "1";
+            document.getElementById("cr-unite").value = "pce";
+            document.getElementById("modal-creation-rapide").classList.remove("hidden");
+            setTimeout(() => document.getElementById("cr-nom").focus(), 50);
+        }
+
+        function fermerCreationRapide() {
+            document.getElementById("modal-creation-rapide").classList.add("hidden");
+            viderRecherche();
+        }
+
+        async function creerProduitRapide(event) {
+            event.preventDefault();
+            const payload = {
+                nom: document.getElementById("cr-nom").value,
+                code_barre: document.getElementById("cr-code-barre").value,
+                prix_vente: parseFloat(document.getElementById("cr-prix-vente").value) || 0,
+                stock_actuel: parseFloat(document.getElementById("cr-stock").value) || 0,
+                unite: document.getElementById("cr-unite").value || "pce",
+            };
+            try {
+                const response = await fetch(`${API_URL}/produits`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify(payload)
+                });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) { const err = await response.json(); alert("⚠️ " + (err.detail || "Erreur.")); return; }
+                const data = await response.json();
+                document.getElementById("modal-creation-rapide").classList.add("hidden");
+                await chargerProduits(); // recharge la liste pour récupérer le nouveau produit à jour
+                ajouterAuPanier(data.produit_id, payload.nom, payload.prix_vente);
+                viderRecherche();
+            } catch (e) { alert("Erreur réseau."); }
+        }
+
+        function paveSaisir(car) {
+            if (paveProduitId === null) return;
+            if (car === "." && paveValeur.includes(".")) return; // un seul point décimal
+            // Si la valeur affichée est encore celle pré-remplie (premier appui), on repart de zéro
+            if (!paveSaisirAmorce) { paveValeur = ""; paveSaisirAmorce = true; }
+            paveValeur += car;
+            document.getElementById("pave-perm-affichage").innerText = paveValeur || "0";
+        }
+        function paveEffacer() {
+            if (paveProduitId === null) return;
+            paveValeur = paveValeur.slice(0, -1);
+            paveSaisirAmorce = true;
+            document.getElementById("pave-perm-affichage").innerText = paveValeur || "0";
+        }
+
+        function paveValider() {
+            if (paveProduitId === null) return;
+            const nouvelleQte = parseFloat(paveValeur);
+            if (isNaN(nouvelleQte) || nouvelleQte <= 0) { alert("⚠️ Quantité invalide."); return; }
+            const ligne = panier.find(l => l.produit_id === paveProduitId);
+            const produit = tousLesProduits.find(p => p.id === paveProduitId);
+            if (ligne && produit && nouvelleQte > produit.stock) {
+                alert(`⚠️ Stock insuffisant — disponible : ${produit.stock}.`);
+                return;
+            }
+            if (ligne) ligne.quantite = nouvelleQte;
+            deselectionnerLigne();
+            mettreAJourAffichage();
+        }
+
+        function paveRetirerLigne() {
+            if (paveProduitId === null) return;
+            panier = panier.filter(l => l.produit_id !== paveProduitId);
+            deselectionnerLigne();
+            mettreAJourAffichage();
+        }
+
+
+
+        // Attend qu'une image soit réellement chargée avant impression —
+        // évite le ticket imprimé avec une case vide à la place du QR code.
+        function attendreImageChargee(imgEl, timeoutMs = 1500) {
+            return new Promise((resolve) => {
+                if (imgEl.complete && imgEl.naturalWidth !== 0) { resolve(); return; }
+                const fini = () => resolve();
+                imgEl.onload = fini;
+                imgEl.onerror = fini;
+                setTimeout(fini, timeoutMs);
+            });
+        }
+
+        async function validerLaVente() {
+            if (panier.length === 0) return;
+            const modePaiement = document.getElementById("mode-paiement-select").value;
+            const clientSelect = document.getElementById("client-select");
+            const clientId = clientSelect.value ? parseInt(clientSelect.value) : null;
+            const clientNom = clientId ? clientSelect.options[clientSelect.selectedIndex].text : null;
+
+            if (modePaiement === "CREDIT" && !clientId) {
+                alert("⚠️ Sélectionne un client pour une vente à crédit.");
+                return;
+            }
+
+            const recuMontant = parseFloat(document.getElementById("recu-input").value) || 0;
+            const totalVente = calculerTotal();
+            const monnaieRendue = Math.max(0, recuMontant - totalVente);
+            const nomVendeur = localStorage.getItem("hshop_user") || "Vendeur Comptoir";
+
+            const payload = {
+                client_id: clientId, mode_paiement: modePaiement, remise: 0.0, recu: recuMontant, note: "Vente Comptoir Web",
+                lignes: panier.map(item => ({ produit_id: item.produit_id, quantite: item.quantite, prix_unitaire: item.prix_unitaire, remise: item.remise }))
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/ventes`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify(payload)
+                });
+                if (response.status === 401) { gererNonAutorise(); return; }
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    document.getElementById("ticket-date").innerText = "Date: " + new Date().toLocaleString("fr-FR");
+                    document.getElementById("ticket-vendeur").innerText = nomVendeur;
+                    document.getElementById("ticket-total").innerText = totalVente.toLocaleString() + " F";
+                    // En CREDIT, "reçu" est l'acompte réel (peut être 0) — pas un repli sur le total.
+                    const recuAffiche = modePaiement === "CREDIT" ? recuMontant : (recuMontant > 0 ? recuMontant : totalVente);
+                    document.getElementById("ticket-recu").innerText = recuAffiche.toLocaleString() + " F";
+                    document.getElementById("ticket-monnaie").innerText = monnaieRendue.toLocaleString() + " F";
+
+                    const blocCredit = document.getElementById("ticket-credit-bloc");
+                    if (modePaiement === "CREDIT") {
+                        const montantCredit = Math.max(0, totalVente - recuMontant);
+                        blocCredit.style.display = "block";
+                        blocCredit.innerHTML = `<div style="display:flex;font-weight:bold;"><div style="width:60%;">Client :</div><div style="width:40%;text-align:right;">${clientNom || '-'}</div></div>
+                            <div style="display:flex;font-weight:bold;"><div style="width:60%;">Ajouté au crédit :</div><div style="width:40%;text-align:right;">${montantCredit.toLocaleString()} F</div></div>`;
+                    } else {
+                        blocCredit.style.display = "none";
+                        blocCredit.innerHTML = "";
+                    }
+
+                    const conteneurLignes = document.getElementById("ticket-lignes");
+                    conteneurLignes.innerHTML = "";
+                    panier.forEach(item => {
+                        const div = document.createElement("div"); div.style.display = "flex"; div.style.marginBottom = "3px";
+                        div.innerHTML = `<div style="width: 50%; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.nom}</div><div style="width: 20%; text-align: center;">${item.quantite}</div><div style="width: 30%; text-align: right;">${(item.quantite * item.prix_unitaire).toLocaleString()} F</div>`;
+                        conteneurLignes.appendChild(div);
+                    });
+
+                    // Bloc FEC (numéro + QR) — obligatoire dès le 1er juillet 2026
+                    const numeroEl = document.getElementById("ticket-fec-numero");
+                    const qrEl = document.getElementById("ticket-fec-qr");
+                    if (data.fec && data.fec.numero) {
+                        numeroEl.innerText = "FEC N° " + data.fec.numero;
+                        if (data.fec.qr_base64) {
+                            qrEl.src = "data:image/png;base64," + data.fec.qr_base64;
+                            qrEl.style.display = "block";
+                            await attendreImageChargee(qrEl); // sinon le ticket peut s'imprimer avant que le QR soit rendu
+                        } else {
+                            qrEl.style.display = "none";
+                            console.warn("FEC: numéro reçu mais qr_base64 est vide — vérifier generer_qr_bytes() dans fec.py");
+                        }
+                    } else {
+                        numeroEl.innerText = "⚠ Facture FEC non émise — à régulariser";
+                        qrEl.style.display = "none";
+                        alert("⚠️ La vente est enregistrée mais la facture FEC n'a pas pu être émise. Vérifie fec.py et les logs.");
+                    }
+
+                    // L'impression se fait directement côté serveur (ESC/POS) si configurée
+                    // dans Paramètres > Imprimante — plus de boîte de dialogue navigateur
+                    // automatique. Le bouton "Réimprimer" reste disponible en secours.
+                    afficherConfirmationVente(data.fec && data.fec.numero ? data.fec.numero : null);
+                    viderPanier();
+                    document.getElementById("mode-paiement-select").value = "ESPECES";
+                    gererChangementModePaiement();
+                    chargerProduits();
+                    chargerClientsPourVente(); // resynchronise les soldes affichés
+                    document.getElementById("recherche-input").focus(); // prêt pour le client suivant / prochain scan
+                } else if (response.status === 400) {
+                    const err = await response.json();
+                    alert("⚠️ " + (err.detail || "Stock insuffisant."));
+                    chargerProduits(); // resynchronise les stocks affichés
+                } else { alert("Erreur lors de la validation."); }
+            } catch (e) { alert("Erreur réseau."); }
+        }
+
+        async function chargerHistorique() {
+            const corps = document.getElementById("table-corps");
+            try {
+                const response = await fetch(`${API_URL}/ventes/historique`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error();
+                const ventes = await response.json();
+                corps.innerHTML = "";
+                if (ventes.length === 0) { corps.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-gray-400 italic">Aucune vente.</td></tr>`; return; }
+                ventes.forEach(v => {
+                    const tr = document.createElement("tr"); tr.className = "hover:bg-gray-50 border-b cursor-pointer transition";
+                    tr.onclick = () => ouvrirDetailsVente(v.id);
+                    tr.innerHTML = `<td class="p-3 font-bold text-blue-600">#${v.id}</td><td class="p-3 text-gray-500 text-sm">${v.date_vente}</td><td class="p-3"><span class="bg-gray-100 px-2 py-1 rounded text-xs font-bold">${v.vendeur || 'Web'}</span></td><td class="p-3 text-xs font-bold">${v.mode_paiement}</td><td class="p-3 text-gray-500 text-sm truncate max-w-xs">${v.note || '-'}</td><td class="p-3 text-right flex items-center justify-end gap-3"><span class="font-black text-gray-900">${v.total.toLocaleString()} F</span><button class="bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs px-2 py-1 rounded font-bold transition">👁 Voir</button></td>`;
+                    corps.appendChild(tr);
+                });
+            } catch (e) { corps.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-red-500">Erreur historique.</td></tr>`; }
+        }
+
+        async function chargerStock() {
+            const corps = document.getElementById("table-stock-corps");
+            corps.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-400 italic">Chargement du stock...</td></tr>`;
+            try {
+                const response = await fetch(`${API_URL}/produits`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error();
+                tousLesProduits = await response.json();
+                corps.innerHTML = "";
+                
+                tousLesProduits.forEach(p => {
+                    const tr = document.createElement("tr"); tr.className = "hover:bg-gray-50 border-b transition";
+                    const alerteStockClass = p.stock <= 5 ? "bg-red-100 text-red-800 font-bold px-2 py-1 rounded" : "bg-green-100 text-green-800 px-2 py-1 rounded";
+
+                    tr.innerHTML = `
+                        <td class="p-3 text-gray-400">#${p.id}</td>
+                        <td class="p-3 font-bold text-gray-800">${p.nom}</td>
+                        <td class="p-3">${p.prix_vente.toLocaleString()} F</td>
+                        <td class="p-3 text-center"><span class="${alerteStockClass}">${p.stock}</span></td>
+                        <td class="p-3 text-center text-gray-500 text-sm">${p.unite}</td>
+                        <td class="p-3 text-right"><button onclick="ajouterStockRapide(${p.id}, '${p.nom}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition">+ Ajouter</button></td>
+                    `;
+                    corps.appendChild(tr);
+                });
+            } catch (e) { corps.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-red-500 font-bold">Erreur.</td></tr>`; }
+        }
+
+        async function ajouterStockRapide(produitId, nomProduit) {
+            const qteStr = prompt(`📦 Combien d'unités voulez-vous ajouter pour [ ${nomProduit} ] ?`);
+            if (!qteStr || isNaN(qteStr) || parseFloat(qteStr) <= 0) return;
+            const qte = parseFloat(qteStr);
+            try {
+                const response = await fetch(`${API_URL}/produits/${produitId}/approvisionner`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({ quantite: qte })
+                });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (response.ok) { alert(`✅ Stock mis à jour (+${qte} pour ${nomProduit})`); chargerStock(); } else { alert("Erreur."); }
+            } catch (e) { alert("Erreur réseau."); }
+        }
+
+        // ============== DEPENSES ==============
+        async function chargerDepenses() {
+            const corps = document.getElementById("table-depenses-corps");
+            corps.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-400 italic">Chargement...</td></tr>`;
+            const toutes = document.getElementById("toggle-toutes-depenses").checked;
+            try {
+                const response = await fetch(`${API_URL}/depenses${toutes ? '/historique' : ''}`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error();
+                const depenses = await response.json();
+
+                const enAttente = depenses.filter(d => !d.cloture);
+                const total = enAttente.reduce((s, d) => s + d.montant, 0);
+                document.getElementById("total-depenses-affiche").innerText = "En attente : " + Math.round(total).toLocaleString() + " F";
+
+                corps.innerHTML = depenses.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-gray-400 italic">Aucune dépense.</td></tr>` :
+                    depenses.map(d => `
+                        <tr class="${d.cloture ? 'opacity-60' : ''}">
+                            <td class="p-3 text-xs text-gray-500">${d.date_depense}</td>
+                            <td class="p-3"><span class="bg-gray-100 text-xs px-2 py-1 rounded font-bold">${d.categorie || '-'}</span></td>
+                            <td class="p-3 text-sm">${d.description || '-'}</td>
+                            <td class="p-3 text-xs text-gray-500">${d.operateur}</td>
+                            <td class="p-3">${d.cloture ? '<span class="text-xs text-gray-400">Clôturée</span>' : '<span class="text-xs text-orange-500 font-bold">En attente</span>'}</td>
+                            <td class="p-3 text-right font-bold text-red-600">${Math.round(d.montant).toLocaleString()} F</td>
+                            <td class="p-3 text-right">${d.cloture ? '' : `<button onclick="supprimerDepense(${d.id})" class="text-xs text-gray-400 hover:text-red-500 hover:underline">Supprimer</button>`}</td>
+                        </tr>`).join("");
+            } catch (e) { corps.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-500">Erreur de chargement.</td></tr>`; }
+        }
+
+        async function ajouterDepense(event) {
+            event.preventDefault();
+            const description = document.getElementById("dep-description").value.trim();
+            const montant = parseFloat(document.getElementById("dep-montant").value) || 0;
+            if (!description) { alert("⚠️ Le motif est obligatoire."); return; }
+            if (montant <= 0) { alert("⚠️ Le montant doit être positif."); return; }
+            const payload = {
+                montant: montant,
+                categorie: document.getElementById("dep-categorie").value,
+                mode_paiement: document.getElementById("dep-mode").value,
+                description: description,
+            };
+            try {
+                const response = await fetch(`${API_URL}/depenses`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify(payload)
+                });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) { const err = await response.json(); alert("⚠️ " + (err.detail || "Erreur.")); return; }
+                document.getElementById("dep-montant").value = "";
+                document.getElementById("dep-categorie").value = "";
+                document.getElementById("dep-description").value = "";
+                chargerDepenses();
+            } catch (e) { alert("Erreur réseau."); }
+        }
+
+        async function supprimerDepense(id) {
+            if (!confirm("Supprimer cette dépense ?")) return;
+            try {
+                const response = await fetch(`${API_URL}/depenses/${id}`, { method: "DELETE", headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) { const err = await response.json(); alert("⚠️ " + (err.detail || "Erreur.")); return; }
+                chargerDepenses();
+            } catch (e) { alert("Erreur réseau."); }
+        }
+
+        function exporterStockCSV() {
+    if (tousLesProduits.length === 0) { 
+        alert("Aucun produit à exporter."); 
+        return; 
+    }
+    
+    // En-tête du fichier avec séparateur point-virgule
+    let csvContent = "ID;Nom;Prix_Vente;Stock_Actuel;Unite\n";
+    
+    tousLesProduits.forEach(p => {
+        let stockFormate = p.stock.toString().replace('.', ',');
+        let ligne = `${p.id};"${p.nom.replace(/"/g, '""')}";${p.prix_vente};${stockFormate};${p.unite}`;
+        csvContent += ligne + "\n";
+    });
+
+    // Création du Blob avec le marqueur BOM pour forcer Excel à lire le format UTF-8
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    
+    // Téléchargement direct
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `HSHOP_Stock_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url); // Libère la mémoire
+        }
+
+        function importerStockCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const texte = e.target.result; const lignes = texte.split("\n");
+                let erreurs = 0; let succes = 0;
+                for (let i = 1; i < lignes.length; i++) {
+                    const ligne = lignes[i].trim(); if (!ligne) continue;
+                    const colonnes = ligne.split(";"); if (colonnes.length < 4) { erreurs++; continue; }
+                    const nom = colonnes[0].replace(/^"|"$/g, ''); const prix_vente = parseFloat(colonnes[1]);
+                    const stock = parseFloat(colonnes[2]); const unite = colonnes[3].replace(/^"|"$/g, '');
+                    if (isNaN(prix_vente) || isNaN(stock) || !nom) { erreurs++; continue; }
+                    const payload = { nom: nom, prix_achat: prix_vente * 0.7, prix_vente: prix_vente, stock_actuel: stock, unite: unite, categorie_id: null };
+                    try {
+                        const response = await fetch(`${API_URL}/produits`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                            body: JSON.stringify(payload)
+                        });
+                        if (response.status === 401) { gererNonAutorise(); return; }
+                        if (response.ok) succes++; else erreurs++;
+                    } catch (err) { erreurs++; }
+                }
+                alert(`📊 Résultat :\n✅ ${succes} produits ajoutés.\n❌ ${erreurs} lignes ignorées.`);
+                document.getElementById('csv-file-input').value = ""; chargerStock();
+            };
+            reader.readAsText(file);
+        }
+
+        async function ouvrirDetailsVente(venteId) {
+            if (window.event) window.event.stopPropagation();
+            document.getElementById("modal-titre-id").innerText = `#${venteId}`;
+            const corpsModal = document.getElementById("modal-table-corps");
+            corpsModal.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-400 italic">Chargement...</td></tr>`;
+            document.getElementById("modal-details").classList.remove("hidden");
+            try {
+                const response = await fetch(`${API_URL}/ventes-details/${venteId}`, { headers: { "Authorization": `Bearer ${token}` } });
+                if (response.status === 401) { gererNonAutorise(); return; }
+                if (!response.ok) throw new Error();
+                const lignes = await response.json();
+                corpsModal.innerHTML = "";
+                lignes.forEach(l => {
+                    const tr = document.createElement("tr"); tr.className = "border-b";
+                    tr.innerHTML = `<td class="p-2 font-bold text-gray-800">${l.produit_nom}</td><td class="p-2 text-center text-gray-500">${l.quantite} ${l.unite}</td><td class="p-2 text-right">${l.prix_unitaire.toLocaleString()} F</td><td class="p-2 text-right font-bold text-gray-900">${(l.quantite * l.prix_unitaire).toLocaleString()} F</td>`;
+                    corpsModal.appendChild(tr);
+                });
+            } catch (e) { corpsModal.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500 font-bold">Erreur.</td></tr>`; }
+        }
+
+        function fermerModal() { document.getElementById("modal-details").classList.add("hidden"); if (window.event) window.event.stopPropagation(); }
+        function deconnexion() { localStorage.clear(); location.reload(); }
+    </script>
+</body>
+</html>
